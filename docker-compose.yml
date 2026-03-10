@@ -1,0 +1,38 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ba_user
+      POSTGRES_PASSWORD: ba_password
+      POSTGRES_DB: business_analyst
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ba_user -d business_analyst"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      DATABASE_URL: postgresql://ba_user:ba_password@db:5432/business_analyst
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      TEAM_PASSWORD_HASH: ${TEAM_PASSWORD_HASH:-}
+      JWT_SECRET: ${JWT_SECRET:-changeme-generate-a-real-secret}
+      PORT: ${PORT:-8000}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - uploads_data:/app/uploads
+
+volumes:
+  postgres_data:
+  uploads_data:

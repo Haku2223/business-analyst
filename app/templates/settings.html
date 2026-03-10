@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block topbar_title %}Settings{% endblock %}
+
+{% block content %}
+<div style="max-width:600px">
+  {% if success %}
+  <div class="alert alert-success">{{ success }}</div>
+  {% endif %}
+
+  <div class="card mb-3">
+    <div class="card-header"><span class="card-title">Filter Presets</span></div>
+    <div class="card-body">
+      {% if presets %}
+      <table class="data-table">
+        <thead><tr><th>Name</th><th>Created by</th><th>Created at</th><th></th></tr></thead>
+        <tbody>
+          {% for preset in presets %}
+          <tr>
+            <td><a href="/filter?load_preset={{ preset.id }}" style="color:#2563eb">{{ preset.name }}</a></td>
+            <td>{{ preset.created_by or '—' }}</td>
+            <td>{{ preset.created_at.strftime('%d %b %Y %H:%M') if preset.created_at else '—' }}</td>
+            <td>
+              <form method="post" action="/settings/delete-preset/{{ preset.id }}" style="display:inline">
+                <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Delete this preset?')">Delete</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="text-muted">No presets saved yet. <a href="/filter">Create one from the Filter page.</a></p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><span class="card-title">Application Info</span></div>
+    <div class="card-body">
+      <table style="font-size:13px;width:100%">
+        <tr><td style="color:#6b7280;padding:6px 0;width:180px">Database</td><td>{{ db_type }}</td></tr>
+        <tr><td style="color:#6b7280;padding:6px 0">API Key Configured</td><td>{{ 'Yes' if has_api_key else 'No — Phase 2b will not work' }}</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

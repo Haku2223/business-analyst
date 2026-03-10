@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}Filter Config{% endblock %}
+{% block topbar_title %}Phase 1 Filter Configuration{% endblock %}
+
+{% block head %}
+<style>
+.filter-section { margin-bottom: 28px; }
+.filter-section h3 { font-size: 14px; font-weight: 700; color: #374151; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 2px solid #e5e7eb; }
+.filter-row { display: grid; grid-template-columns: 28px 1fr auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid #f3f4f6; }
+.filter-row:last-child { border-bottom: none; }
+.filter-name { font-weight: 500; font-size: 13.5px; }
+.filter-desc { font-size: 12px; color: #9ca3af; margin-top: 2px; }
+.filter-inputs { display: flex; gap: 8px; align-items: center; }
+.range-sep { color: #9ca3af; font-size: 12px; }
+input[type=number], input[type=text] { padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; width: 100px; }
+input[type=number]:focus, input[type=text]:focus { outline: none; border-color: #2563eb; }
+.badge-hard { background: #fee2e2; color: #991b1b; font-size: 10px; padding: 1px 6px; border-radius: 999px; font-weight: 600; }
+.badge-soft { background: #fef9c3; color: #713f12; font-size: 10px; padding: 1px 6px; border-radius: 999px; font-weight: 600; }
+.sni-textarea { width: 100%; min-height: 100px; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 12px; font-family: monospace; resize: vertical; }
+.preset-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+</style>
+{% endblock %}
+
+{% block topbar_right %}
+  <a href="/upload" class="btn btn-primary btn-sm">↑ Upload File</a>
+{% endblock %}
+
+{% block content %}
+{% if success %}
+<div class="alert alert-success">{{ success }}</div>
+{% endif %}
+{% if error %}
+<div class="alert alert-danger">{{ error }}</div>
+{% endif %}
+
+<div style="max-width:860px">
+<form method="post" action="/filter">
+
+  <!-- Preset bar -->
+  <div class="card mb-3">
+    <div class="card-body" style="padding:14px">
+      <div class="preset-row">
+        <span style="font-weight:600;font-size:13px">Saved Presets:</span>
+        {% if presets %}
+          {% for preset in presets %}
+          <a href="/filter?load_preset={{ preset.id }}" class="btn btn-secondary btn-sm">{{ preset.name }}</a>
+          {% endfor %}
+        {% else %}
+          <span class="text-muted" style="font-size:13px">None saved yet.</span>
+        {% endif %}
+        <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+          <input type="text" name="preset_name" placeholder="Preset name…" style="width:160px" />
+          <button type="submit" name="action" value="save_preset" class="btn btn-secondary btn-sm">Save Preset</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hard filters -->
+  <div class="card filter-section">
+    <div class="card-header"><span class="card-title">Hard Filters <span class="badge-hard">EXCLUDE if fails</span></span></div>
+    <div class="card-body">
+
+      <!-- Company type -->
+      <div class="filter-row">
+        <input type="checkbox" name="hard_company_type_enabled" {% if cfg.hard_company_type_enabled %}checked{% endif %} />
+        <div>
+          <div class="filter-name">Company Type</div>
+          <div class="filter-desc">BOLAGSTYP must contain this value</div>
+        </div>
+        <div class="filter-inputs">
+          <input type="text" name="hard_company_type_value" value="{{ cfg.hard_company_type_value }}" style="width:140px" />
+        </div>
+      </div>
+
+      <!-- Company age -->
+      <div class="filter-row">
+        <input type="checkbox" name="hard_age_enabled" {% if cfg.hard_age_enabled %}checked{% endif %} />
+        <div>
+          <div class="filter-name">Company Age</div>
+          <div class="filter-desc">Registered at least N years ago (from REGISTRERINGSDATUM)</div>
+        </div>
+        <div class="filter-inputs">
+          <span class="range-sep">≥</span>
+          <input type="number" name="hard_age_min_years" value="{{ cfg.hard_age_min_years }}" min="0" max="100" />
+          <span class="range-sep">years</span>
+        </div>
+      </div>
+
+      <!-- Revenue -->
+      <div class="filter-row">
+        <input type="checkbox" name="hard_revenue_enabled" {% if cfg.hard_revenue_enabled %}checked{% endif %} />
+        <div>
+          <div class="filter-name">Revenue (OMSÄTTNING)</div>
+          <div class="filter-desc">Annual revenue in SEK</div>
+        </div>
+        <div class="filter-inputs">
+          <input type="number" name="hard_revenue_min" value="{{ cfg.hard_revenue_min }}" min="0" step="100000" />
+          <span class="range-sep">–</span>
+          <input type="number" name="hard_revenue_max" value="{{ cfg.hard_revenue_max }}" min="0" step="100000" />
+          <span class="range-sep">SEK</span>
+        </div>
+      </div>
+
+      <!-- Employees -->
+      <div class="filter-row">
+        <input type="checkbox" name="hard_employees_enabled" {% if cfg.hard_employees_enabled %}checked{% endif %} />
+        <div>
+          <div class="filter-name">Employees (ANTAL ANSTÄLLDA)</div>
+          <div class="filter-desc">Current year headcount</div>
+        </div>
+        <div class="filter-inputs">
+          <input type="number" name="hard_employees_min" value="{{ cfg.hard_employees_min }}" min="0" />
+          <span class="range-sep">–</span>
+          <input type="number" name="hard_employees_max" value="{{ cfg.hard_employees_max }}" min="0" />
+          <span class="range-sep">people</span>
+        </div>
+      </div>
+
+      <!-- SNI codes -->
+      <div class="filter-row">
+        <input type="checkbox" name="hard_sni_enabled" {% if cfg.hard_sni_enabled %}checked{% endif %} />
+        <div>
+          <div class="filter-name">SNI Code Match</div>
+          <div class="filter-desc">Prefix-based match against SNI 1–5 columns. "33" matches 33110, 33200, etc.</div>
+        </div>
+        <div></div>
+      </div>
+      <div style="margin:8px 0 12px 40px;">
+        <textarea name="sni_codes_text" class="sni-textarea" placeholder="One code prefix per line or comma-separated">{{ cfg.sni_codes | join('\n') }}</textarea>
+        <div style="font-size:12px;color:#9ca3af;margin-top:4px">
+          Default: 33, 43, 62, 71, 81, 25, 26, 27, 28, 46, 52, 69, 74, 78, 80, 85, 37, 38, 49
+        </div>
+      </div>
+
+      <!-- Profitability -->
+      <div class="filter-row">
+        <input type="checkbox" name="hard_profitability_enabled" {% if cfg.hard_profitability_enabled %}checked{% endif %} />
+        <div>
+          <div class="filter-name">Current Profitability</div>
+          <div class="filter-desc">ÅRETS RESULTAT must be &gt; 0 (positive net result)</div>
+        </div>
+        <div class="filter-inputs">
+          <span class="range-sep">Result &gt; 0 SEK</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Soft filters -->
+  <div class="card filter-section">
+    <div class="card-header"><span class="card-title">Soft Filters <span class="badge-soft">−1 SCORE if fails</span></span></div>
+    <div class="card-body">
+
+      <!-- Profit margin -->
+      <div class="filter-row">
+        <input type="checkbox" name="soft_margin_enabled" {% if cfg.soft_margin_enabled %}checked{% endif %} />
+        <div>
+          <div class="filter-name">Profit Margin (VINSTMARGINAL I %)</div>
+          <div class="filter-desc">Below threshold adds −1 to soft score</div>
+        </div>
+        <div class="filter-inputs">
+          <span class="range-sep">≥</span>
+          <input type="number" name="soft_margin_min_pct" value="{{ cfg.soft_margin_min_pct }}" min="0" max="100" step="0.5" />
+          <span class="range-sep">%</span>
+        </div>
+      </div>
+
+      <!-- Soliditet -->
+      <div class="filter-row">
+        <input type="checkbox" name="soft_soliditet_enabled" {% if cfg.soft_soliditet_enabled %}checked{% endif %} />
+        <div>
+          <div class="filter-name">Soliditet / Equity Ratio (SOLIDITET I %)</div>
+          <div class="filter-desc">Below threshold adds −1 to soft score</div>
+        </div>
+        <div class="filter-inputs">
+          <span class="range-sep">≥</span>
+          <input type="number" name="soft_soliditet_min_pct" value="{{ cfg.soft_soliditet_min_pct }}" min="0" max="100" step="0.5" />
+          <span class="range-sep">%</span>
+        </div>
+      </div>
+
+      <!-- Data recency -->
+      <div class="filter-row">
+        <input type="checkbox" name="soft_recency_enabled" {% if cfg.soft_recency_enabled %}checked{% endif %} />
+        <div>
+          <div class="filter-name">Data Recency (BOKSLUTSPERIOD SLUT)</div>
+          <div class="filter-desc">Adds −1 if latest fiscal year end is older than N months</div>
+        </div>
+        <div class="filter-inputs">
+          <span class="range-sep">Within</span>
+          <input type="number" name="soft_recency_months" value="{{ cfg.soft_recency_months }}" min="1" max="60" />
+          <span class="range-sep">months</span>
+        </div>
+      </div>
+
+      <!-- County -->
+      <div class="filter-row">
+        <input type="checkbox" name="soft_county_enabled" {% if cfg.soft_county_enabled %}checked{% endif %} />
+        <div>
+          <div class="filter-name">County (LÄN)</div>
+          <div class="filter-desc">Optional: add −1 if company is not in selected counties</div>
+        </div>
+        <div></div>
+      </div>
+      <div style="margin:8px 0 12px 40px;">
+        <input type="text" name="soft_county_values_text" value="{{ cfg.soft_county_values | join(', ') }}"
+               placeholder="e.g. Stockholms län, Västra Götalands län" style="width:400px" />
+        <div style="font-size:12px;color:#9ca3af;margin-top:4px">Comma-separated county names. Leave empty to disable.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div style="display:flex;gap:10px">
+    <button type="submit" name="action" value="save" class="btn btn-primary">Save Configuration</button>
+    <a href="/upload" class="btn btn-secondary">Upload File</a>
+    <a href="/results" class="btn btn-secondary">View Results</a>
+  </div>
+</form>
+</div>
+{% endblock %}

@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+{% block title %}Results{% endblock %}
+{% block topbar_title %}Phase 1 Results{% endblock %}
+
+{% block head %}
+<style>
+.stat-pill { display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;font-size:12px;font-weight:600;background:#f3f4f6;color:#374151; }
+.stat-pill.green { background:#dcfce7;color:#166534; }
+.stat-pill.blue { background:#dbeafe;color:#1e40af; }
+.status-select { padding:3px 6px;border-radius:4px;border:1px solid #d1d5db;font-size:12px;cursor:pointer;background:#fff; }
+.flags-0 { color:#6b7280; }
+.flags-1 { color:#d97706; }
+.flags-2 { color:#dc2626; }
+.flags-3 { color:#dc2626;font-weight:700; }
+.sort-header { cursor:pointer;user-select:none;white-space:nowrap; }
+.sort-header:hover { color:#1a1f2e; }
+.filter-bar { display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px; }
+.filter-bar input, .filter-bar select { padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px; }
+</style>
+{% endblock %}
+
+{% block topbar_right %}
+  {% if batch_id %}
+  <span class="stat-pill blue">Batch #{{ batch_id }}</span>
+  {% endif %}
+  <span class="stat-pill">{{ total_count }} uploaded</span>
+  <span class="stat-pill green">{{ passed_count }} passed Phase 1</span>
+  <a href="/enrich" class="btn btn-primary btn-sm">⚡ Run Phase 2</a>
+{% endblock %}
+
+{% block content %}
+{% if message %}
+<div class="alert alert-success">{{ message }}</div>
+{% endif %}
+
+<!-- Filter bar -->
+<div class="filter-bar">
+  <input type="text" id="search-input" placeholder="Search company name, orgnr…" style="width:240px" />
+  <select id="status-filter">
+    <option value="">All statuses</option>
+    <option value="unreviewed">Unreviewed</option>
+    <option value="watch">Watch</option>
+    <option value="deep_dive">Deep Dive</option>
+    <option value="pass">Pass</option>
+  </select>
+  <select id="batch-filter">
+    <option value="">All batches</option>
+    {% for b in all_batches %}
+    <option value="{{ b.id }}" {% if batch_id == b.id %}selected{% endif %}>{{ b.filename }} ({{ b.upload_timestamp.strftime('%d %b %Y') }})</option>
+    {% endfor %}
+  </select>
+  <label style="display:flex;align-items:center;gap:6px;font-size:13px">
+    <input type="checkbox" id="show-passed-only" checked /> Phase 1 passed only
+  </label>
+  <span id="result-count" style="margin-left:auto;font-size:13px;color:#6b7280"></span>
+</div>
+
+<!-- Results table -->
+<div class="card">
+  <div class="table-wrap">
+    <table class="data-table" id="results-table">
+      <thead>
+        <tr>
+          <th class="sort-header" data-col="name">Company</th>
+          <th class="sort-header" data-col="orgnr">Org.Nr</th>
+          <th class="sort-header" data-col="city">City / County</th>
+          <th class="sort-header" data-col="sni">Industry (SNI)</th>
+          <th class="sort-header" data-col="age">Age</th>
+          <th class="sort-header" data-col="revenue">Revenue</th>
+          <th class="sort-header" data-col="employees">Emp.</th>
+          <th class="sort-header" data-col="net_result">Net (KSEK)</th>
+          <th class="sort-header" data-col="margin">Margin %</th>
+          <th class="sort-header" data-col="soliditet">Sol. %</th>
+          <th class="sort-header" data-col="owner_salary">Own. Sal.</th>
+          <th class="sort-header" data-col="cash">Cash</th>
+          <th>Chair / VD</th>
+          <th>Website</th>
+          <th class="sort-header" data-col="soft_flags">Flags</th>
+          <th>Ph2</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="results-tbody">
+        {% for row in rows %}
+        <tr
+          data-name="{{ row.bolagsnamn or '' }}"
+          data-orgnr="{{ row.orgnr or '' }}"
+          data-status="{{ row.pipeline_status or 'unreviewed' }}"
+          data-passed="{{ '1' if row.phase1_passed else '0' }}"
+          data-batch="{{ row.batch_id or '' }}"
+        >
+          <td>
+            {% if row.allabolag_url %}
+            <a href="{{ row.allabolag_url }}" target="_blank" rel="noopener" style="color:#2563eb;font-weight:500">{{ row.bolagsnamn or '—' }}</a>
+            {% else %}
+            <span style="font-weight:500">{{ row.bolagsnamn or '—' }}</span>
+            {% endif %}
+            {% if row.previously_passed %}
+            <span class="badge badge-orange" title="Previously marked as Pass in an earlier batch">⚠ Previously passed</span>
+            {% endif %}
+          </td>
+          <td style="font-family:monospace;font-size:12px">{{ row.orgnr }}</td>
+          <td>
+            {{ row.ort or '—' }}
+            {% if row.lan %}<br><small class="text-muted">{{ row.lan }}</small>{% endif %}
+          </td>
+          <td style="max-width:140px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis" title="{{ row.sni_names or '' }}">
+            {{ row.sni_display or '—' }}
+          </td>
+          <td data-val="{{ row.age_years or 0 }}">{{ row.age_years or '—' }}y</td>
+          <td data-val="{{ row.omsattning_sek or 0 }}">
+            {{ "%.1f"|format(row.omsattning_sek / 1000000) if row.omsattning_sek else '—' }} M
+          </td>
+          <td data-val="{{ row.antal_anstallda or 0 }}">{{ row.antal_anstallda or '—' }}</td>
+          <td data-val="{{ row.arets_resultat_ksek or 0 }}" style="{% if row.arets_resultat_ksek and row.arets_resultat_ksek > 0 %}color:#16a34a{% elif row.arets_resultat_ksek %}color:#dc2626{% endif %}">
+            {{ row.arets_resultat_ksek | int if row.arets_resultat_ksek else '—' }}
+          </td>
+          <td data-val="{{ row.vinstmarginal or 0 }}">{{ "%.1f"|format(row.vinstmarginal) if row.vinstmarginal else '—' }}%</td>
+          <td data-val="{{ row.soliditet or 0 }}">{{ "%.1f"|format(row.soliditet) if row.soliditet else '—' }}%</td>
+          <td data-val="{{ row.loner_ksek or 0 }}">{{ row.loner_ksek | int if row.loner_ksek else '—' }}</td>
+          <td data-val="{{ row.kassa_ksek or 0 }}">{{ row.kassa_ksek | int if row.kassa_ksek else '—' }}</td>
+          <td style="max-width:130px;font-size:12px">
+            {{ row.ordforande or '—' }}
+            {% if row.vd %}<br>{{ row.vd }}{% endif %}
+          </td>
+          <td>
+            {% if row.hemsida %}
+            <a href="{{ row.hemsida }}" target="_blank" rel="noopener" style="color:#2563eb;font-size:12px" title="{{ row.hemsida }}">🔗</a>
+            {% else %}—{% endif %}
+          </td>
+          <td class="flags-{{ row.soft_flags or 0 }}">
+            {% if row.soft_flags %}{{ row.soft_flags }}⚑{% else %}—{% endif %}
+          </td>
+          <td>
+            <span class="badge {% if row.phase2_status == 'complete' %}badge-green{% elif row.phase2_status == 'running' %}badge-blue{% elif row.phase2_status == 'failed' %}badge-red{% else %}badge-grey{% endif %}">
+              {{ row.phase2_status.replace('_', ' ').title() if row.phase2_status else '—' }}
+            </span>
+          </td>
+          <td>
+            <select class="status-select" onchange="updateStatus('{{ row.orgnr }}', this.value)">
+              <option value="unreviewed" {% if row.pipeline_status == 'unreviewed' %}selected{% endif %}>Unreviewed</option>
+              <option value="watch" {% if row.pipeline_status == 'watch' %}selected{% endif %}>Watch</option>
+              <option value="deep_dive" {% if row.pipeline_status == 'deep_dive' %}selected{% endif %}>Deep Dive</option>
+              <option value="pass" {% if row.pipeline_status == 'pass' %}selected{% endif %}>Pass</option>
+            </select>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Pagination -->
+{% if total_pages > 1 %}
+<div class="pagination">
+  {% if page > 1 %}
+  <a href="?page={{ page - 1 }}{% if batch_id %}&batch_id={{ batch_id }}{% endif %}" class="page-btn">‹ Prev</a>
+  {% endif %}
+  {% for p in range(1, total_pages + 1) %}
+    {% if p == page %}
+    <span class="page-btn active">{{ p }}</span>
+    {% elif p <= 3 or p >= total_pages - 2 or (p >= page - 2 and p <= page + 2) %}
+    <a href="?page={{ p }}{% if batch_id %}&batch_id={{ batch_id }}{% endif %}" class="page-btn">{{ p }}</a>
+    {% elif p == 4 or p == total_pages - 3 %}
+    <span class="page-btn" style="border:none;cursor:default">…</span>
+    {% endif %}
+  {% endfor %}
+  {% if page < total_pages %}
+  <a href="?page={{ page + 1 }}{% if batch_id %}&batch_id={{ batch_id }}{% endif %}" class="page-btn">Next ›</a>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Client-side filter (works on visible page rows)
+const searchInput = document.getElementById('search-input');
+const statusFilter = document.getElementById('status-filter');
+const batchFilter = document.getElementById('batch-filter');
+const passedOnlyCheck = document.getElementById('show-passed-only');
+const tbody = document.getElementById('results-tbody');
+const resultCount = document.getElementById('result-count');
+
+function applyFilters() {
+  const search = searchInput.value.toLowerCase();
+  const status = statusFilter.value;
+  const batch = batchFilter.value;
+  const passedOnly = passedOnlyCheck.checked;
+  let visible = 0;
+  Array.from(tbody.querySelectorAll('tr')).forEach(tr => {
+    const name = (tr.dataset.name || '').toLowerCase();
+    const orgnr = (tr.dataset.orgnr || '').toLowerCase();
+    const rowStatus = tr.dataset.status || '';
+    const rowBatch = tr.dataset.batch || '';
+    const passed = tr.dataset.passed === '1';
+
+    let show = true;
+    if (search && !name.includes(search) && !orgnr.includes(search)) show = false;
+    if (status && rowStatus !== status) show = false;
+    if (batch && rowBatch !== batch) show = false;
+    if (passedOnly && !passed) show = false;
+    tr.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+  resultCount.textContent = visible + ' companies shown';
+}
+
+searchInput.addEventListener('input', applyFilters);
+statusFilter.addEventListener('change', applyFilters);
+batchFilter.addEventListener('change', applyFilters);
+passedOnlyCheck.addEventListener('change', applyFilters);
+applyFilters();
+
+// Column sorting
+const table = document.getElementById('results-table');
+const headers = table.querySelectorAll('th.sort-header');
+headers.forEach(th => {
+  th.addEventListener('click', () => {
+    const col = th.dataset.col;
+    const asc = th.dataset.sort !== 'asc';
+    headers.forEach(h => { h.dataset.sort = ''; h.innerHTML = h.innerHTML.replace(' ▲','').replace(' ▼',''); });
+    th.dataset.sort = asc ? 'asc' : 'desc';
+    th.innerHTML += asc ? ' ▲' : ' ▼';
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    rows.sort((a, b) => {
+      const aCell = a.querySelector(`td[data-val]`) ? null : null;
+      // Find td by column index
+      const idx = Array.from(th.parentElement.children).indexOf(th);
+      const av = a.cells[idx]?.dataset?.val ?? a.cells[idx]?.textContent?.trim() ?? '';
+      const bv = b.cells[idx]?.dataset?.val ?? b.cells[idx]?.textContent?.trim() ?? '';
+      const an = parseFloat(av), bn = parseFloat(bv);
+      if (!isNaN(an) && !isNaN(bn)) return asc ? an - bn : bn - an;
+      return asc ? av.localeCompare(bv) : bv.localeCompare(av);
+    });
+    rows.forEach(r => tbody.appendChild(r));
+  });
+});
+
+// Status update via AJAX
+async function updateStatus(orgnr, newStatus) {
+  try {
+    const resp = await fetch(`/api/company/${encodeURIComponent(orgnr)}/status`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({status: newStatus}),
+    });
+    if (resp.ok) {
+      showFlash(`Status updated to "${newStatus.replace('_', ' ')}"`, 'success');
+    } else {
+      showFlash('Failed to update status', 'danger');
+    }
+  } catch(e) {
+    showFlash('Network error', 'danger');
+  }
+}
+</script>
+{% endblock %}

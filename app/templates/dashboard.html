@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block topbar_title %}Dashboard{% endblock %}
+
+{% block topbar_right %}
+  <a href="/upload" class="btn btn-primary btn-sm">↑ New Upload</a>
+{% endblock %}
+
+{% block content %}
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-bottom:24px;">
+  {% set stats = [
+    ('Total Companies', stats.total, '#2563eb'),
+    ('Watch', stats.watch, '#2563eb'),
+    ('Deep Dive', stats.deep_dive, '#16a34a'),
+    ('Pass', stats.passed, '#dc2626'),
+    ('Phase 1 Passed', stats.phase1_passed, '#6b7280'),
+  ] %}
+  {% for label, value, color in stats %}
+  <div class="card" style="border-top:3px solid {{ color }}">
+    <div class="card-body" style="padding:16px;">
+      <div style="font-size:28px;font-weight:700;color:{{ color }}">{{ value }}</div>
+      <div style="font-size:12px;color:#6b7280;margin-top:4px">{{ label }}</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+  <!-- Deep Dive companies -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">🔍 Active Deep Dives</span>
+      <a href="/pipeline" class="btn btn-secondary btn-sm">View All</a>
+    </div>
+    <div class="card-body" style="padding:0;">
+      {% if deep_dive_companies %}
+      <table class="data-table">
+        <thead><tr>
+          <th>Company</th><th>Revenue</th><th>Margin</th>
+        </tr></thead>
+        <tbody>
+          {% for c in deep_dive_companies %}
+          <tr>
+            <td><a href="/company/{{ c.orgnr }}" style="color:#2563eb;font-weight:500">{{ c.bolagsnamn }}</a><br><small class="text-muted">{{ c.ort }}</small></td>
+            <td>{{ "%.1f"|format(c.omsattning / 1000000) if c.omsattning else '—' }} MSEK</td>
+            <td>{{ "%.1f"|format(c.vinstmarginal) if c.vinstmarginal else '—' }}%</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div style="padding:20px;text-align:center;color:#9ca3af">No Deep Dive companies yet.<br>Run Phase 1 and promote companies.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Recent activity -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">📋 Recent Activity</span></div>
+    <div class="card-body" style="padding:0;">
+      {% if recent_events %}
+      <div style="padding:4px 0;">
+        {% for ev in recent_events %}
+        <div style="padding:10px 16px;border-bottom:1px solid #f3f4f6;display:flex;gap:10px;align-items:flex-start;">
+          <div style="flex:1;">
+            <a href="/company/{{ ev.company_orgnr }}" style="color:#2563eb;font-weight:500">{{ ev.company_orgnr }}</a>
+            <span style="color:#6b7280"> → </span>
+            <span class="badge {% if ev.to_status == 'deep_dive' %}badge-green{% elif ev.to_status == 'watch' %}badge-blue{% elif ev.to_status == 'pass' %}badge-red{% else %}badge-grey{% endif %}">
+              {{ ev.to_status.replace('_',' ').title() }}
+            </span>
+            {% if ev.user_name %}<span style="color:#9ca3af;font-size:11px"> by {{ ev.user_name }}</span>{% endif %}
+          </div>
+          <div style="font-size:11px;color:#9ca3af;white-space:nowrap">{{ ev.timestamp.strftime('%d %b %H:%M') if ev.timestamp else '' }}</div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div style="padding:20px;text-align:center;color:#9ca3af">No activity yet.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% if latest_batch %}
+<div class="card mt-4">
+  <div class="card-header">
+    <span class="card-title">📊 Latest Batch — {{ latest_batch.filename }}</span>
+    <span style="font-size:12px;color:#9ca3af">Uploaded {{ latest_batch.upload_timestamp.strftime('%d %b %Y %H:%M') }}</span>
+  </div>
+  <div class="card-body">
+    <div style="display:flex;gap:24px;flex-wrap:wrap;">
+      <div><span style="font-size:20px;font-weight:700">{{ latest_batch.row_count_uploaded or 0 }}</span><br><small class="text-muted">Uploaded</small></div>
+      <div style="color:#6b7280;font-size:20px;align-self:center">→</div>
+      <div><span style="font-size:20px;font-weight:700;color:#16a34a">{{ latest_batch.row_count_phase1 or '—' }}</span><br><small class="text-muted">Phase 1 passed</small></div>
+      <div style="color:#6b7280;font-size:20px;align-self:center">→</div>
+      <div><span style="font-size:20px;font-weight:700;color:#2563eb">{{ latest_batch.row_count_phase2a or '—' }}</span><br><small class="text-muted">Phase 2a passed</small></div>
+    </div>
+    <div style="margin-top:16px;display:flex;gap:10px">
+      <a href="/results" class="btn btn-secondary btn-sm">View Results</a>
+      <a href="/enrich" class="btn btn-primary btn-sm">Run Phase 2</a>
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="card mt-4">
+  <div class="card-body" style="text-align:center;padding:40px;">
+    <div style="font-size:40px;margin-bottom:12px">📂</div>
+    <h2 style="font-weight:600;margin-bottom:8px">No data yet</h2>
+    <p class="text-muted" style="margin-bottom:20px">Upload a CSV or Excel export from Allabolag.se to get started.</p>
+    <a href="/upload" class="btn btn-primary">Upload File</a>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
