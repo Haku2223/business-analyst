@@ -11,6 +11,21 @@ __pycache__/
 dist/
 build/
 *.egg
+.env
+.venv/
+venv/
+env/
+*.db
+*.sqlite
+*.sqlite3
+business_analyst.db
+.DS_Store
+uploads/
+*.log
+.pytest_cache/
+htmlcov/
+.coverage
+node_modules/
 .eggs/
 
 # Virtual environments

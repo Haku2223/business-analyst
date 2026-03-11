@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% block title %}Upload{% endblock %}
+{% block topbar_title %}Upload Company List{% endblock %}
+
+{% block head %}
+<style>
+.drop-zone {
+  border: 2px dashed #d1d5db;
+  border-radius: 10px;
+  padding: 48px 32px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .2s, background .2s;
+  background: #fafafa;
+}
+.drop-zone.over { border-color: #2563eb; background: #eff6ff; }
+.drop-zone input[type=file] { display: none; }
+.drop-zone-icon { font-size: 40px; margin-bottom: 12px; }
+.drop-zone-text { font-size: 16px; font-weight: 600; color: #374151; }
+.drop-zone-sub { font-size: 13px; color: #9ca3af; margin-top: 6px; }
+#file-info { margin-top: 14px; padding: 12px 16px; background: #eff6ff; border: 1px solid #93c5fd; border-radius: 6px; display: none; }
+#progress-section { display: none; margin-top: 20px; }
+.progress-bar-wrap { background: #e5e7eb; border-radius: 999px; height: 8px; overflow: hidden; }
+.progress-bar-fill { height: 100%; background: #2563eb; border-radius: 999px; transition: width .3s; }
+#sheet-selector { display: none; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% if error %}
+<div class="alert alert-danger">{{ error }}</div>
+{% endif %}
+{% if success %}
+<div class="alert alert-success">{{ success }}</div>
+{% endif %}
+
+<div style="max-width:700px;margin:0 auto;">
+<div class="card">
+  <div class="card-header"><span class="card-title">📂 Upload Allabolag Export</span></div>
+  <div class="card-body">
+    <p class="text-muted" style="margin-bottom:20px">
+      Upload a CSV or Excel (.xlsx) file exported from <strong>Allabolag.se</strong>.
+      The file should contain the standard premium export columns. Supports up to 40,000 rows.
+    </p>
+
+    <form id="upload-form" method="post" action="/upload" enctype="multipart/form-data">
+      <!-- Drop zone -->
+      <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+        <input type="file" id="file-input" name="file" accept=".csv,.xlsx,.xls" />
+        <div class="drop-zone-icon">📁</div>
+        <div class="drop-zone-text">Drop file here or click to browse</div>
+        <div class="drop-zone-sub">CSV or Excel (.xlsx) · Max 50 MB</div>
+      </div>
+
+      <div id="file-info">
+        <strong id="file-name"></strong>
+        <span id="file-size" style="color:#6b7280;margin-left:8px"></span>
+      </div>
+
+      <!-- Sheet selector (Excel only) -->
+      <div id="sheet-selector" class="form-group mt-3">
+        <label class="form-label">Sheet</label>
+        <select name="sheet_name" id="sheet-select" class="form-control" style="max-width:300px">
+          {% if sheets %}
+            {% for s in sheets %}
+            <option value="{{ s }}" {% if s == selected_sheet %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+          {% endif %}
+        </select>
+      </div>
+
+      <!-- Phase 1 options summary -->
+      <div class="card mt-3" style="background:#f8f9fb">
+        <div class="card-body" style="padding:14px">
+          <div style="font-weight:600;margin-bottom:8px">Phase 1 Filter Settings</div>
+          <div style="font-size:13px;color:#6b7280">
+            Using current filter configuration.
+            <a href="/filter" style="color:#2563eb">Edit filters</a> before uploading if needed.
+          </div>
+          {% if filter_config %}
+          <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px">
+            <span class="badge badge-blue">Revenue: {{ filter_config.revenue_min_msek }}–{{ filter_config.revenue_max_msek }} MSEK</span>
+            <span class="badge badge-blue">Employees: {{ filter_config.employees_min }}–{{ filter_config.employees_max }}</span>
+            <span class="badge badge-blue">Age: ≥{{ filter_config.min_age_years }} years</span>
+            <span class="badge badge-blue">{{ filter_config.sni_codes|length }} SNI prefixes</span>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div id="progress-section">
+        <div style="font-size:13px;color:#6b7280;margin-bottom:6px" id="progress-label">Uploading…</div>
+        <div class="progress-bar-wrap"><div class="progress-bar-fill" id="progress-bar" style="width:0%"></div></div>
+      </div>
+
+      <div style="margin-top:20px;display:flex;gap:10px">
+        <button type="submit" class="btn btn-primary btn-lg" id="submit-btn" disabled>
+          ↑ Upload &amp; Run Phase 1
+        </button>
+        <a href="/" class="btn btn-secondary">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% if preview_rows %}
+<div class="card mt-4">
+  <div class="card-header"><span class="card-title">Preview — first 5 rows</span></div>
+  <div class="card-body" style="padding:0;overflow-x:auto">
+    <table class="data-table">
+      <thead><tr>{% for col in preview_cols %}<th>{{ col }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for row in preview_rows %}
+        <tr>{% for col in preview_cols %}<td>{{ row.get(col, '') }}</td>{% endfor %}</tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+const submitBtn = document.getElementById('submit-btn');
+const fileInfo = document.getElementById('file-info');
+const fileName = document.getElementById('file-name');
+const fileSize = document.getElementById('file-size');
+const sheetSelector = document.getElementById('sheet-selector');
+
+function formatBytes(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1024*1024) return (b/1024).toFixed(1) + ' KB';
+  return (b/1024/1024).toFixed(1) + ' MB';
+}
+
+function handleFile(f) {
+  if (!f) return;
+  fileName.textContent = f.name;
+  fileSize.textContent = formatBytes(f.size);
+  fileInfo.style.display = 'block';
+  submitBtn.disabled = false;
+
+  const isExcel = f.name.toLowerCase().endsWith('.xlsx') || f.name.toLowerCase().endsWith('.xls');
+  if (isExcel) {
+    // Submit form to get sheet names via a preview POST
+    const fd = new FormData();
+    fd.append('file', f);
+    fd.append('preview_only', '1');
+    fetch('/upload/sheets', {method:'POST', body: fd})
+      .then(r => r.json())
+      .then(data => {
+        if (data.sheets && data.sheets.length > 1) {
+          const sel = document.getElementById('sheet-select');
+          sel.innerHTML = data.sheets.map(s =>
+            `<option value="${s}"${s === data.default_sheet ? ' selected' : ''}>${s}</option>`
+          ).join('');
+          sheetSelector.style.display = 'block';
+        }
+      })
+      .catch(() => {});
+  } else {
+    sheetSelector.style.display = 'none';
+  }
+}
+
+fileInput.addEventListener('change', () => handleFile(fileInput.files[0]));
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('over');
+  const f = e.dataTransfer.files[0];
+  if (f) {
+    const dt = new DataTransfer();
+    dt.items.add(f);
+    fileInput.files = dt.files;
+    handleFile(f);
+  }
+});
+
+document.getElementById('upload-form').addEventListener('submit', () => {
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Processing…';
+  document.getElementById('progress-section').style.display = 'block';
+  // Animate progress bar
+  let pct = 0;
+  const iv = setInterval(() => {
+    pct = Math.min(pct + (pct < 70 ? 5 : 1), 95);
+    document.getElementById('progress-bar').style.width = pct + '%';
+    if (pct < 30) document.getElementById('progress-label').textContent = 'Uploading file…';
+    else if (pct < 60) document.getElementById('progress-label').textContent = 'Parsing data…';
+    else document.getElementById('progress-label').textContent = 'Running Phase 1 filters…';
+  }, 400);
+});
+</script>
+{% endblock %}
