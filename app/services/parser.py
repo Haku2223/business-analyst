@@ -294,7 +294,7 @@ def parse_file(
                 .str.replace(r"[^\d\-\.]", "", regex=True)
                 .replace("", None)
                 .pipe(pd.to_numeric, errors="coerce")
-                .mul(100)  # SEK → öre
+                .mul(100_000)  # KSEK → SEK → öre
                 .round(0)
                 .astype("Int64")
             )
