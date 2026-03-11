@@ -12,6 +12,18 @@
 .flags-1 { color:#d97706; }
 .flags-2 { color:#dc2626; }
 .flags-3 { color:#dc2626;font-weight:700; }
+.flag-btn { background:none;border:none;padding:0;cursor:pointer;font:inherit;color:inherit;font-weight:inherit; }
+.flag-btn:hover { text-decoration:underline dotted; }
+.flag-popover {
+  position:fixed;z-index:9999;background:#1e2433;color:#f1f5f9;border-radius:8px;
+  padding:12px 14px;box-shadow:0 4px 20px rgba(0,0,0,0.35);min-width:220px;max-width:300px;
+  font-size:12px;line-height:1.5;pointer-events:none;
+}
+.flag-popover h4 { margin:0 0 8px;font-size:12px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em; }
+.flag-popover ul { margin:0;padding:0;list-style:none; }
+.flag-popover li { display:flex;align-items:flex-start;gap:6px;padding:3px 0;border-bottom:1px solid #2d3448; }
+.flag-popover li:last-child { border-bottom:none; }
+.flag-popover .fi { color:#f59e0b;flex-shrink:0;margin-top:1px; }
 .sort-header { cursor:pointer;user-select:none;white-space:nowrap; }
 .sort-header:hover { color:#1a1f2e; }
 .filter-bar { display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px; }
@@ -129,7 +141,9 @@
             {% else %}—{% endif %}
           </td>
           <td class="flags-{{ row.soft_flags or 0 }}">
-            {% if row.soft_flags %}{{ row.soft_flags }}⚑{% else %}—{% endif %}
+            {% if row.soft_flags %}
+            <button class="flag-btn" data-flags="{{ row.failed_filters | tojson | e }}" onclick="showFlagPopover(event, this)">{{ row.soft_flags }}⚑</button>
+            {% else %}—{% endif %}
           </td>
           <td>
             <span class="badge {% if row.phase2_status == 'complete' %}badge-green{% elif row.phase2_status == 'running' %}badge-blue{% elif row.phase2_status == 'failed' %}badge-red{% else %}badge-grey{% endif %}">
@@ -237,6 +251,60 @@ headers.forEach(th => {
     rows.forEach(r => tbody.appendChild(r));
   });
 });
+
+// Flag explanation popover
+const FLAG_LABELS = {
+  'soft:profit_margin': { label: 'Low profit margin', desc: 'Profit margin is below the 10% threshold' },
+  'soft:soliditet':     { label: 'Low soliditet',     desc: 'Equity ratio (soliditet) is below 50%' },
+  'soft:data_recency':  { label: 'Stale financials',  desc: 'Latest annual report is older than 18 months' },
+  'soft:county':        { label: 'Outside target county', desc: 'Company is not in the selected county filter' },
+};
+
+let activePopover = null;
+
+function showFlagPopover(event, btn) {
+  event.stopPropagation();
+  // Close if clicking the same button again
+  if (activePopover && activePopover._anchor === btn) {
+    closePopover();
+    return;
+  }
+  closePopover();
+
+  let flags;
+  try { flags = JSON.parse(btn.dataset.flags || '[]'); } catch(e) { flags = []; }
+  const softFlags = flags.filter(f => String(f).startsWith('soft:'));
+  if (!softFlags.length) return;
+
+  const pop = document.createElement('div');
+  pop.className = 'flag-popover';
+  pop._anchor = btn;
+  pop.innerHTML = `<h4>Soft flag reasons</h4><ul>${
+    softFlags.map(f => {
+      const info = FLAG_LABELS[f] || { label: f.replace('soft:', ''), desc: 'Filter threshold not met' };
+      return `<li><span class="fi">⚑</span><div><strong>${info.label}</strong><br><span style="color:#94a3b8">${info.desc}</span></div></li>`;
+    }).join('')
+  }</ul>`;
+  document.body.appendChild(pop);
+  activePopover = pop;
+
+  // Position near the button
+  const rect = btn.getBoundingClientRect();
+  const popW = 260, popH = pop.offsetHeight || 120;
+  let left = rect.right + 8;
+  let top = rect.top - 4;
+  if (left + popW > window.innerWidth - 8) left = rect.left - popW - 8;
+  if (top + popH > window.innerHeight - 8) top = window.innerHeight - popH - 8;
+  pop.style.left = Math.max(8, left) + 'px';
+  pop.style.top = Math.max(8, top) + 'px';
+}
+
+function closePopover() {
+  if (activePopover) { activePopover.remove(); activePopover = null; }
+}
+
+document.addEventListener('click', closePopover);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closePopover(); });
 
 // Status update via AJAX
 async function updateStatus(orgnr, newStatus) {
