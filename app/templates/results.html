@@ -8,22 +8,22 @@
 .stat-pill.green { background:#dcfce7;color:#166534; }
 .stat-pill.blue { background:#dbeafe;color:#1e40af; }
 .status-select { padding:3px 6px;border-radius:4px;border:1px solid #d1d5db;font-size:12px;cursor:pointer;background:#fff; }
-.flags-0 { color:#6b7280; }
-.flags-1 { color:#d97706; }
-.flags-2 { color:#dc2626; }
-.flags-3 { color:#dc2626;font-weight:700; }
-.flag-btn { background:none;border:none;padding:0;cursor:pointer;font:inherit;color:inherit;font-weight:inherit; }
+.flag-btn { background:none;border:none;padding:2px 5px;border-radius:4px;cursor:pointer;font:inherit;font-size:12px;font-weight:600;line-height:1; }
 .flag-btn:hover { text-decoration:underline dotted; }
+.flag-fail { color:#dc2626; }  /* hard filter rejected */
+.flag-warn { color:#d97706; }  /* soft flags only */
 .flag-popover {
-  position:fixed;z-index:9999;background:#1e2433;color:#f1f5f9;border-radius:8px;
-  padding:12px 14px;box-shadow:0 4px 20px rgba(0,0,0,0.35);min-width:220px;max-width:300px;
-  font-size:12px;line-height:1.5;pointer-events:none;
+  position:fixed;z-index:10000;background:#1e2433;color:#f1f5f9;border-radius:8px;
+  padding:12px 14px;box-shadow:0 4px 24px rgba(0,0,0,0.4);min-width:240px;max-width:320px;
+  font-size:12px;line-height:1.5;
 }
-.flag-popover h4 { margin:0 0 8px;font-size:12px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em; }
-.flag-popover ul { margin:0;padding:0;list-style:none; }
-.flag-popover li { display:flex;align-items:flex-start;gap:6px;padding:3px 0;border-bottom:1px solid #2d3448; }
+.flag-popover h4 { margin:0 0 6px;font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em; }
+.flag-popover ul { margin:0 0 10px;padding:0;list-style:none; }
+.flag-popover ul:last-child { margin-bottom:0; }
+.flag-popover li { display:flex;align-items:flex-start;gap:6px;padding:4px 0;border-bottom:1px solid #2d3448; }
 .flag-popover li:last-child { border-bottom:none; }
-.flag-popover .fi { color:#f59e0b;flex-shrink:0;margin-top:1px; }
+.flag-popover .fi-hard { color:#f87171;flex-shrink:0;margin-top:1px; }
+.flag-popover .fi-soft { color:#fbbf24;flex-shrink:0;margin-top:1px; }
 .sort-header { cursor:pointer;user-select:none;white-space:nowrap; }
 .sort-header:hover { color:#1a1f2e; }
 .filter-bar { display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px; }
@@ -140,9 +140,14 @@
             <a href="{{ row.hemsida }}" target="_blank" rel="noopener" style="color:#2563eb;font-size:12px" title="{{ row.hemsida }}">🔗</a>
             {% else %}—{% endif %}
           </td>
-          <td class="flags-{{ row.soft_flags or 0 }}">
-            {% if row.soft_flags %}
-            <button class="flag-btn" data-flags="{{ row.failed_filters | tojson | e }}" onclick="showFlagPopover(event, this)">{{ row.soft_flags }}⚑</button>
+          <td>
+            {% if row.failed_filters %}
+            <button class="flag-btn {{ 'flag-fail' if not row.phase1_passed else 'flag-warn' }}"
+                    data-flags='{{ row.failed_filters | tojson }}'
+                    onclick="showFlagPopover(event, this)">
+              {%- if not row.phase1_passed -%}✕{%- if row.soft_flags %}&thinsp;{{ row.soft_flags }}⚑{%- endif -%}
+              {%- else -%}{{ row.soft_flags }}⚑{%- endif -%}
+            </button>
             {% else %}—{% endif %}
           </td>
           <td>
@@ -253,47 +258,64 @@ headers.forEach(th => {
 });
 
 // Flag explanation popover
-const FLAG_LABELS = {
-  'soft:profit_margin': { label: 'Low profit margin', desc: 'Profit margin is below the 10% threshold' },
-  'soft:soliditet':     { label: 'Low soliditet',     desc: 'Equity ratio (soliditet) is below 50%' },
-  'soft:data_recency':  { label: 'Stale financials',  desc: 'Latest annual report is older than 18 months' },
-  'soft:county':        { label: 'Outside target county', desc: 'Company is not in the selected county filter' },
+const HARD_LABELS = {
+  'company_type':  { label: 'Not an Aktiebolag',       desc: 'Company type does not match "Aktiebolag"' },
+  'company_age':   { label: 'Company too young',        desc: 'Registered less than 15 years ago' },
+  'revenue':       { label: 'Revenue out of range',     desc: 'Revenue is outside the 3–30 MSEK range' },
+  'employees':     { label: 'Headcount out of range',   desc: 'Employees are outside the 3–30 range' },
+  'sni_code':      { label: 'SNI code not matched',     desc: 'No SNI code matches the configured target list' },
+  'profitability': { label: 'Unprofitable',             desc: 'Net result (årets resultat) is zero or negative' },
+};
+const SOFT_LABELS = {
+  'soft:profit_margin': { label: 'Low profit margin',      desc: 'Profit margin is below the 10% threshold' },
+  'soft:soliditet':     { label: 'Low soliditet',          desc: 'Equity ratio (soliditet) is below 50%' },
+  'soft:data_recency':  { label: 'Stale financials',       desc: 'Latest annual report is older than 18 months' },
+  'soft:county':        { label: 'Outside target county',  desc: 'Company is not in the selected county filter' },
 };
 
 let activePopover = null;
 
 function showFlagPopover(event, btn) {
   event.stopPropagation();
-  // Close if clicking the same button again
-  if (activePopover && activePopover._anchor === btn) {
-    closePopover();
-    return;
-  }
+  if (activePopover && activePopover._anchor === btn) { closePopover(); return; }
   closePopover();
 
   let flags;
   try { flags = JSON.parse(btn.dataset.flags || '[]'); } catch(e) { flags = []; }
+  if (!flags.length) return;
+
+  const hardFlags = flags.filter(f => !String(f).startsWith('soft:'));
   const softFlags = flags.filter(f => String(f).startsWith('soft:'));
-  if (!softFlags.length) return;
+
+  function renderItems(list, labelMap, iconClass) {
+    return list.map(f => {
+      const info = labelMap[f] || { label: f.replace('soft:', ''), desc: 'Filter threshold not met' };
+      return `<li><span class="${iconClass}">●</span><div><strong>${info.label}</strong><br><span style="color:#94a3b8">${info.desc}</span></div></li>`;
+    }).join('');
+  }
+
+  let html = '';
+  if (hardFlags.length) {
+    html += `<h4>❌ Phase 1 rejected</h4><ul>${renderItems(hardFlags, HARD_LABELS, 'fi-hard')}</ul>`;
+  }
+  if (softFlags.length) {
+    html += `<h4>⚑ Soft warnings</h4><ul>${renderItems(softFlags, SOFT_LABELS, 'fi-soft')}</ul>`;
+  }
 
   const pop = document.createElement('div');
   pop.className = 'flag-popover';
   pop._anchor = btn;
-  pop.innerHTML = `<h4>Soft flag reasons</h4><ul>${
-    softFlags.map(f => {
-      const info = FLAG_LABELS[f] || { label: f.replace('soft:', ''), desc: 'Filter threshold not met' };
-      return `<li><span class="fi">⚑</span><div><strong>${info.label}</strong><br><span style="color:#94a3b8">${info.desc}</span></div></li>`;
-    }).join('')
-  }</ul>`;
+  pop.innerHTML = html;
   document.body.appendChild(pop);
   activePopover = pop;
 
-  // Position near the button
+  // Position near the button — prefer right side, flip left if needed
   const rect = btn.getBoundingClientRect();
-  const popW = 260, popH = pop.offsetHeight || 120;
-  let left = rect.right + 8;
+  const popW = 300;
+  const popH = pop.getBoundingClientRect().height || 140;
+  let left = rect.right + 10;
   let top = rect.top - 4;
-  if (left + popW > window.innerWidth - 8) left = rect.left - popW - 8;
+  if (left + popW > window.innerWidth - 8) left = rect.left - popW - 10;
   if (top + popH > window.innerHeight - 8) top = window.innerHeight - popH - 8;
   pop.style.left = Math.max(8, left) + 'px';
   pop.style.top = Math.max(8, top) + 'px';
