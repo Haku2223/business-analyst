@@ -190,7 +190,22 @@ Max 1 request per 0.5 seconds to Allabolag. Add random jitter ±0.2s. ~8–10 mi
 ### Scraping Target
 URL: `{company_allabolag_url}/bokslut`
 
-Parse the HTML table on the /bokslut page to extract per year: Räkenskapsår, Omsättning (KSEK), Årets resultat (KSEK), Antal anställda, Vinstmarginal %, Soliditet %
+Scrape all financial data rendered directly in HTML on the /bokslut page. Do NOT download PDF annual reports. Extract data for up to 5 fiscal years across all five sections below. Store every field per fiscal year. If a field is missing in the HTML for a given year, store NULL — do not skip the row.
+
+**Section 1 — Bokslutsperiod:**
+Startdatum (fiscal year start), Slutdatum (fiscal year end)
+
+**Section 2 — Löner & Utdelning (KSEK):**
+Valutakod, Löner styrelse och VD, Löner övriga, Föreslagen utdelning
+
+**Section 3 — Resultaträkning (KSEK):**
+Valutakod, Nettoomsättning, Övrig omsättning, Omsättning, Lagerförändring, Rörelsekostnader, Rörelseresultat efter avskrivningar, Finansiella intäkter, Finansiella kostnader, Resultat efter finansnetto, Resultat före skatt, Skatt på årets resultat, Årets resultat
+
+**Section 4 — Balansräkning (KSEK):**
+Valutakod, Immateriella anläggningstillgångar, Materiella anläggningstillgångar, Finansiella anläggningstillgångar, Anläggningstillgångar, Varulager, Kundfordringar, Kassa och bank, Omsättningstillgångar, Summa tillgångar, Fritt eget kapital, Obeskattade reserver, Eget kapital, Avsättningar, Långfristiga skulder, Leverantörsskulder, Kortfristiga skulder, Summa eget kapital och skulder
+
+**Section 5 — Nyckeltal:**
+Vinstmarginal i %, Kassalikviditet i %, Soliditet i %, Skuldsättningsgrad, Avkastning eget kapital i %, Avkastning totalt kapital i %, Anställda, Personalkostnader per anställd (KSEK), EBITDA (KSEK)
 
 ### Phase 2a Filters
 
