@@ -204,14 +204,92 @@ Phase 2 runs as a background job triggered manually by the user from the UI. It 
 
 #### Data Source
 
-Each company's Allabolag /bokslut page contains a table of annual financial results, typically covering 5–10 years. The system must parse this HTML table to extract the following fields per year:
+Each company's Allabolag /bokslut page displays financial data across three distinct HTML sections. The scraper must extract every field listed below as displayed directly on the page for up to 5 fiscal years. Do NOT download PDF annual reports — scrape only the HTML content rendered on the page.
 
-- Räkenskapsår (fiscal year)
-- Omsättning (revenue in KSEK)
-- Årets resultat (net result in KSEK)
-- Antal anställda (employees)
-- Vinstmarginal % (profit margin)
-- Soliditet % (equity ratio)
+---
+
+**Section 1: Bokslut — Bokslutsperiod**
+
+| Field | Swedish label |
+|---|---|
+| Fiscal year start date | Startdatum |
+| Fiscal year end date | Slutdatum |
+
+---
+
+**Section 2: Bokslut — Löner & Utdelning** (Belopp i 1000)
+
+| Field | Swedish label |
+|---|---|
+| Currency code | Valutakod |
+| Board and CEO salaries | Löner styrelse och VD |
+| Other salaries | Löner övriga |
+| Proposed dividend | Föreslagen utdelning |
+
+---
+
+**Section 3: Bokslut — Resultaträkning** (Belopp i 1000)
+
+| Field | Swedish label |
+|---|---|
+| Currency code | Valutakod |
+| Net revenue | Nettoomsättning |
+| Other revenue | Övrig omsättning |
+| Total revenue | Omsättning |
+| Inventory change | Lagerförändring |
+| Operating costs | Rörelsekostnader |
+| Operating result after depreciation | Rörelseresultat efter avskrivningar |
+| Financial income | Finansiella intäkter |
+| Financial costs | Finansiella kostnader |
+| Result after financial net | Resultat efter finansnetto |
+| Result before tax | Resultat före skatt |
+| Tax on year's result | Skatt på årets resultat |
+| Net result | Årets resultat |
+
+---
+
+**Section 4: Bokslut — Balansräkning** (Belopp i 1000)
+
+| Field | Swedish label |
+|---|---|
+| Currency code | Valutakod |
+| Intangible fixed assets | Immateriella anläggningstillgångar |
+| Tangible fixed assets | Materiella anläggningstillgångar |
+| Financial fixed assets | Finansiella anläggningstillgångar |
+| Total fixed assets | Anläggningstillgångar |
+| Inventory | Varulager |
+| Accounts receivable | Kundfordringar |
+| Cash and bank | Kassa och bank |
+| Total current assets | Omsättningstillgångar |
+| Total assets | Summa tillgångar |
+| Unrestricted equity | Fritt eget kapital |
+| Untaxed reserves | Obeskattade reserver |
+| Total equity | Eget kapital |
+| Provisions | Avsättningar |
+| Long-term liabilities | Långfristiga skulder |
+| Accounts payable | Leverantörsskulder |
+| Total short-term liabilities | Kortfristiga skulder |
+| Total equity and liabilities | Summa eget kapital och skulder |
+
+---
+
+**Section 5: Nyckeltal** (Belopp i 1000)
+
+| Field | Swedish label |
+|---|---|
+| Profit margin % | Vinstmarginal i % |
+| Quick ratio % | Kassalikviditet i % |
+| Equity ratio % | Soliditet i % |
+| Debt-to-equity ratio | Skuldsättningsgrad |
+| Return on equity % | Avkastning eget kapital i % |
+| Return on total capital % | Avkastning totalt kapital i % |
+| Employees | Anställda |
+| Personnel cost per employee (KSEK) | Personalkostnader per anställd (i 1000) |
+| EBITDA (KSEK) | EBITDA (i 1000) |
+
+---
+
+All fields must be stored per fiscal year in the database. If a field is absent from the HTML for a given year, store NULL — do not skip the row. The system must handle pages that show fewer than 5 years without error.
 
 #### Phase 2a Filters
 
