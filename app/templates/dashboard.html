@@ -8,76 +8,93 @@
 
 {% block content %}
 <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-bottom:24px;">
-  {% set stats = [
-    ('Total Companies', stats.total, '#2563eb'),
-    ('Watch', stats.watch, '#2563eb'),
-    ('Deep Dive', stats.deep_dive, '#16a34a'),
-    ('Pass', stats.passed, '#dc2626'),
-    ('Phase 1 Passed', stats.phase1_passed, '#6b7280'),
+  {% set stat_cards = [
+    ('Total Companies', stats.total, '#2563eb', '/results'),
+    ('Watch', stats.watch, '#2563eb', '#group-watch'),
+    ('Deep Dive', stats.deep_dive, '#16a34a', '#group-deep_dive'),
+    ('Pass', stats.passed, '#dc2626', '#group-pass'),
+    ('Phase 1 Passed', stats.phase1_passed, '#6b7280', '/results'),
   ] %}
-  {% for label, value, color in stats %}
-  <div class="card" style="border-top:3px solid {{ color }}">
+  {% for label, value, color, link in stat_cards %}
+  <a href="{{ link }}" class="card" style="border-top:3px solid {{ color }};text-decoration:none;color:inherit;transition:box-shadow .15s;">
     <div class="card-body" style="padding:16px;">
       <div style="font-size:28px;font-weight:700;color:{{ color }}">{{ value }}</div>
       <div style="font-size:12px;color:#6b7280;margin-top:4px">{{ label }}</div>
     </div>
-  </div>
+  </a>
   {% endfor %}
 </div>
 
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
-  <!-- Deep Dive companies -->
-  <div class="card">
-    <div class="card-header">
-      <span class="card-title">🔍 Active Deep Dives</span>
-      <a href="/pipeline" class="btn btn-secondary btn-sm">View All</a>
-    </div>
-    <div class="card-body" style="padding:0;">
-      {% if deep_dive_companies %}
-      <table class="data-table">
-        <thead><tr>
-          <th>Company</th><th>Revenue</th><th>Margin</th>
-        </tr></thead>
-        <tbody>
-          {% for c in deep_dive_companies %}
-          <tr>
-            <td><a href="/company/{{ c.orgnr }}" style="color:#2563eb;font-weight:500">{{ c.bolagsnamn }}</a><br><small class="text-muted">{{ c.ort }}</small></td>
-            <td>{{ "%.1f"|format(c.omsattning / 1000000) if c.omsattning else '—' }} MSEK</td>
-            <td>{{ "%.1f"|format(c.vinstmarginal) if c.vinstmarginal else '—' }}%</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      {% else %}
-      <div style="padding:20px;text-align:center;color:#9ca3af">No Deep Dive companies yet.<br>Run Phase 1 and promote companies.</div>
-      {% endif %}
-    </div>
-  </div>
+<!-- Pipeline status groups + recent activity -->
+{% set status_groups = [
+  ('Watch', watch_companies, '#2563eb', 'badge-blue', 'watch'),
+  ('Deep Dive', deep_dive_companies, '#16a34a', 'badge-green', 'deep_dive'),
+  ('Pass', pass_companies, '#dc2626', 'badge-red', 'pass'),
+] %}
 
-  <!-- Recent activity -->
-  <div class="card">
-    <div class="card-header"><span class="card-title">📋 Recent Activity</span></div>
-    <div class="card-body" style="padding:0;">
-      {% if recent_events %}
-      <div style="padding:4px 0;">
-        {% for ev in recent_events %}
-        <div style="padding:10px 16px;border-bottom:1px solid #f3f4f6;display:flex;gap:10px;align-items:flex-start;">
-          <div style="flex:1;">
-            <a href="/company/{{ ev.company_orgnr }}" style="color:#2563eb;font-weight:500">{{ ev.company_orgnr }}</a>
-            <span style="color:#6b7280"> → </span>
-            <span class="badge {% if ev.to_status == 'deep_dive' %}badge-green{% elif ev.to_status == 'watch' %}badge-blue{% elif ev.to_status == 'pass' %}badge-red{% else %}badge-grey{% endif %}">
-              {{ ev.to_status.replace('_',' ').title() }}
-            </span>
-            {% if ev.user_name %}<span style="color:#9ca3af;font-size:11px"> by {{ ev.user_name }}</span>{% endif %}
-          </div>
-          <div style="font-size:11px;color:#9ca3af;white-space:nowrap">{{ ev.timestamp.strftime('%d %b %H:%M') if ev.timestamp else '' }}</div>
-        </div>
+{% for label, group_companies, color, badge_class, status_key in status_groups %}
+{% if group_companies %}
+<div class="card mb-3" id="group-{{ status_key }}">
+  <div class="card-header">
+    <span class="card-title"><span class="badge {{ badge_class }}">{{ label }}</span> — {{ group_companies | length }} {% if group_companies | length == 1 %}company{% else %}companies{% endif %}</span>
+    <a href="/pipeline" class="btn btn-secondary btn-sm">View Kanban</a>
+  </div>
+  <div class="card-body" style="padding:0;">
+    <table class="data-table">
+      <thead><tr>
+        <th>Company</th><th>Revenue</th><th>Employees</th><th>Margin</th><th>Soliditet</th>
+      </tr></thead>
+      <tbody>
+        {% for c in group_companies[:20] %}
+        <tr>
+          <td><a href="/company/{{ c.orgnr }}" style="color:#2563eb;font-weight:500">{{ c.bolagsnamn }}</a><br><small class="text-muted">{{ c.ort or '—' }}</small></td>
+          <td>{{ "%.1f"|format(c.omsattning / 100 / 1000000) if c.omsattning else '—' }} MSEK</td>
+          <td>{{ c.antal_anstallda or '—' }}</td>
+          <td>{{ "%.1f"|format(c.vinstmarginal) if c.vinstmarginal else '—' }}%</td>
+          <td>{{ "%.1f"|format(c.soliditet) if c.soliditet else '—' }}%</td>
+        </tr>
         {% endfor %}
+      </tbody>
+    </table>
+    {% if group_companies | length > 20 %}
+    <div style="padding:10px 16px;font-size:12px;color:#6b7280;border-top:1px solid #e5e7eb">… and {{ group_companies | length - 20 }} more. <a href="/pipeline">View all on Kanban board.</a></div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+{% endfor %}
+
+{% if not watch_companies and not deep_dive_companies and not pass_companies %}
+<div class="card mb-3">
+  <div class="card-body" style="text-align:center;padding:24px;color:#9ca3af">
+    No companies have been categorized yet. Run Phase 1 and set pipeline statuses from the results page.
+  </div>
+</div>
+{% endif %}
+
+<!-- Recent activity -->
+<div class="card mb-3">
+  <div class="card-header"><span class="card-title">Recent Activity</span></div>
+  <div class="card-body" style="padding:0;">
+    {% if recent_events %}
+    <div style="padding:4px 0;">
+      {% for ev in recent_events %}
+      <div style="padding:10px 16px;border-bottom:1px solid #f3f4f6;display:flex;gap:10px;align-items:flex-start;">
+        <div style="flex:1;">
+          <a href="/company/{{ ev.company_orgnr }}" style="color:#2563eb;font-weight:500">{{ ev.company_orgnr }}</a>
+          <span style="color:#6b7280"> → </span>
+          <span class="badge {% if ev.to_status == 'deep_dive' %}badge-green{% elif ev.to_status == 'watch' %}badge-blue{% elif ev.to_status == 'pass' %}badge-red{% else %}badge-grey{% endif %}">
+            {{ ev.to_status.replace('_',' ').title() }}
+          </span>
+          {% if ev.user_name %}<span style="color:#9ca3af;font-size:11px"> by {{ ev.user_name }}</span>{% endif %}
+        </div>
+        <div style="font-size:11px;color:#9ca3af;white-space:nowrap">{{ ev.timestamp.strftime('%d %b %H:%M') if ev.timestamp else '' }}</div>
       </div>
-      {% else %}
-      <div style="padding:20px;text-align:center;color:#9ca3af">No activity yet.</div>
-      {% endif %}
+      {% endfor %}
     </div>
+    {% else %}
+    <div style="padding:20px;text-align:center;color:#9ca3af">No activity yet.</div>
+    {% endif %}
   </div>
 </div>
 

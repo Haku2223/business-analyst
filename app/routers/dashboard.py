@@ -45,8 +45,10 @@ async def dashboard(request: Request):
             "phase1_passed": phase1_passed,
         }
 
-        # Deep Dive companies (up to 10)
-        deep_dive_companies = [c for c in companies if c.pipeline_status == "deep_dive"][:10]
+        # Companies grouped by pipeline status (up to 10 each for dashboard)
+        watch_companies = [c for c in companies if c.pipeline_status == "watch"]
+        deep_dive_companies = [c for c in companies if c.pipeline_status == "deep_dive"]
+        pass_companies = [c for c in companies if c.pipeline_status == "pass"]
 
         # Recent pipeline events (up to 15)
         ev_result = await db.execute(
@@ -67,7 +69,9 @@ async def dashboard(request: Request):
                 "display_name": display_name,
                 "active_page": "dashboard",
                 "stats": stats,
+                "watch_companies": watch_companies,
                 "deep_dive_companies": deep_dive_companies,
+                "pass_companies": pass_companies,
                 "recent_events": recent_events,
                 "latest_batch": latest_batch,
             },
