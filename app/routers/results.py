@@ -304,3 +304,16 @@ async def refilter_batch(request: Request, batch_id: int):
             "total": len(pairs),
             "passed": passed_count,
         })
+
+
+@router.get("/api/preset/{preset_id}", response_class=JSONResponse)
+async def get_preset(request: Request, preset_id: int):
+    """Return a filter preset's config as JSON."""
+    if not check_auth_redirect(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    async for db in get_db():
+        preset = await db.get(FilterPreset, preset_id)
+        if not preset:
+            return JSONResponse({"error": "Preset not found"}, status_code=404)
+        return JSONResponse(preset.config_json)

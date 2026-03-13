@@ -61,7 +61,7 @@
       <select id="preset-select" style="padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:12px">
         <option value="">Load preset…</option>
         {% for preset in presets %}
-        <option value="{{ preset.config_json | tojson | e }}">{{ preset.name }}</option>
+        <option value="{{ preset.id }}">{{ preset.name }}</option>
         {% endfor %}
       </select>
       {% endif %}
@@ -440,46 +440,51 @@ function toggleFilterPanel() {
   }
 }
 
-// Load preset into filter panel fields
+// Populate filter panel fields from a config object
+function populateFilterPanel(cfg) {
+  const boolFields = [
+    'hard_company_type_enabled', 'hard_age_enabled', 'hard_revenue_enabled',
+    'hard_employees_enabled', 'hard_sni_enabled', 'hard_profitability_enabled',
+    'soft_margin_enabled', 'soft_soliditet_enabled', 'soft_recency_enabled',
+    'soft_county_enabled'
+  ];
+  boolFields.forEach(f => {
+    const el = document.getElementById('fp-' + f);
+    if (el) el.checked = !!cfg[f];
+  });
+  const numFields = [
+    'hard_age_min_years', 'hard_revenue_min', 'hard_revenue_max',
+    'hard_employees_min', 'hard_employees_max',
+    'soft_margin_min_pct', 'soft_soliditet_min_pct', 'soft_recency_months',
+  ];
+  numFields.forEach(f => {
+    const el = document.getElementById('fp-' + f);
+    if (el && cfg[f] !== undefined) el.value = cfg[f];
+  });
+  const ctEl = document.getElementById('fp-hard_company_type_value');
+  if (ctEl && cfg.hard_company_type_value) ctEl.value = cfg.hard_company_type_value;
+  const sniEl = document.getElementById('fp-sni_codes_text');
+  if (sniEl && cfg.sni_codes) sniEl.value = Array.isArray(cfg.sni_codes) ? cfg.sni_codes.join(', ') : cfg.sni_codes;
+  const countyEl = document.getElementById('fp-soft_county_values_text');
+  if (countyEl && cfg.soft_county_values) countyEl.value = Array.isArray(cfg.soft_county_values) ? cfg.soft_county_values.join(', ') : cfg.soft_county_values;
+}
+
+// Load preset into filter panel fields via API
 const presetSelect = document.getElementById('preset-select');
 if (presetSelect) {
-  presetSelect.addEventListener('change', function() {
-    if (!this.value) return;
+  presetSelect.addEventListener('change', async function() {
+    const presetId = this.value;
+    if (!presetId) return;
     try {
-      const cfg = JSON.parse(this.value);
-      // Populate all fields from preset
-      const fields = [
-        'hard_company_type_enabled', 'hard_age_enabled', 'hard_revenue_enabled',
-        'hard_employees_enabled', 'hard_sni_enabled', 'hard_profitability_enabled',
-        'soft_margin_enabled', 'soft_soliditet_enabled', 'soft_recency_enabled',
-        'soft_county_enabled'
-      ];
-      fields.forEach(f => {
-        const el = document.getElementById('fp-' + f);
-        if (el) el.checked = !!cfg[f];
-      });
-      const numFields = {
-        'hard_age_min_years': 'hard_age_min_years',
-        'hard_revenue_min': 'hard_revenue_min',
-        'hard_revenue_max': 'hard_revenue_max',
-        'hard_employees_min': 'hard_employees_min',
-        'hard_employees_max': 'hard_employees_max',
-        'soft_margin_min_pct': 'soft_margin_min_pct',
-        'soft_soliditet_min_pct': 'soft_soliditet_min_pct',
-        'soft_recency_months': 'soft_recency_months',
-      };
-      for (const [elId, cfgKey] of Object.entries(numFields)) {
-        const el = document.getElementById('fp-' + elId);
-        if (el && cfg[cfgKey] !== undefined) el.value = cfg[cfgKey];
-      }
-      const ctEl = document.getElementById('fp-hard_company_type_value');
-      if (ctEl && cfg.hard_company_type_value) ctEl.value = cfg.hard_company_type_value;
-      const sniEl = document.getElementById('fp-sni_codes_text');
-      if (sniEl && cfg.sni_codes) sniEl.value = Array.isArray(cfg.sni_codes) ? cfg.sni_codes.join(', ') : cfg.sni_codes;
-      const countyEl = document.getElementById('fp-soft_county_values_text');
-      if (countyEl && cfg.soft_county_values) countyEl.value = Array.isArray(cfg.soft_county_values) ? cfg.soft_county_values.join(', ') : cfg.soft_county_values;
+      const resp = await fetch(`/api/preset/${presetId}`);
+      if (!resp.ok) { showFlash('Failed to load preset', 'danger'); return; }
+      const cfg = await resp.json();
+      populateFilterPanel(cfg);
       showFlash('Preset loaded into filter panel', 'info');
-    } catch(e) { console.error('Failed to parse preset', e); }
+    } catch(e) {
+      console.error('Failed to load preset', e);
+      showFlash('Failed to load preset', 'danger');
+    }
     this.value = '';
   });
 }
