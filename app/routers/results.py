@@ -155,6 +155,10 @@ async def results_page(
             }
             rows.append(row)
 
+        # Sort rows: passed companies first, then failed — so pagination
+        # groups all passed companies on the earliest pages.
+        rows.sort(key=lambda r: (not r["phase1_passed"], r.get("orgnr", "")))
+
         # Pagination
         total_count = uploaded or len(rows)
         passed_count = passed or sum(1 for r in rows if r["phase1_passed"])
