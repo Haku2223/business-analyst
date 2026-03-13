@@ -28,6 +28,12 @@
 .sort-header:hover { color:#1a1f2e; }
 .filter-bar { display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px; }
 .filter-bar input, .filter-bar select { padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px; }
+/* Filter panel rows */
+.fp-row { display:flex;align-items:center;gap:8px;padding:5px 0;font-size:13px; }
+.fp-row label { display:flex;align-items:center;gap:6px;white-space:nowrap;font-weight:500; }
+.fp-row input[type=number], .fp-row input[type=text] { padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:12px; }
+.fp-unit { color:#9ca3af;font-size:12px; }
+#filter-panel .card-body { max-height:400px;overflow-y:auto; }
 </style>
 {% endblock %}
 
@@ -36,7 +42,8 @@
   <span class="stat-pill blue">Batch #{{ batch_id }}</span>
   {% endif %}
   <span class="stat-pill">{{ total_count }} uploaded</span>
-  <span class="stat-pill green">{{ passed_count }} passed Phase 1</span>
+  <span class="stat-pill green" id="passed-pill">{{ passed_count }} passed Phase 1</span>
+  <button class="btn btn-secondary btn-sm" onclick="toggleFilterPanel()" id="toggle-filters-btn">Edit Filters</button>
   <a href="/enrich" class="btn btn-primary btn-sm">⚡ Run Phase 2</a>
 {% endblock %}
 
@@ -44,6 +51,98 @@
 {% if message %}
 <div class="alert alert-success">{{ message }}</div>
 {% endif %}
+
+<!-- Inline filter panel (collapsible) -->
+<div id="filter-panel" class="card mb-3" style="display:none">
+  <div class="card-header" style="justify-content:space-between">
+    <span class="card-title">Phase 1 Filter Configuration</span>
+    <div style="display:flex;gap:8px;align-items:center">
+      {% if presets %}
+      <select id="preset-select" style="padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:12px">
+        <option value="">Load preset…</option>
+        {% for preset in presets %}
+        <option value="{{ preset.config_json | tojson | e }}">{{ preset.name }}</option>
+        {% endfor %}
+      </select>
+      {% endif %}
+      <button class="btn btn-primary btn-sm" onclick="applyNewFilters()">Apply Filters</button>
+      <button class="btn btn-secondary btn-sm" onclick="toggleFilterPanel()">Close</button>
+    </div>
+  </div>
+  <div class="card-body" style="padding:14px 18px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px 32px">
+
+      <!-- Hard filters column -->
+      <div>
+        <h4 style="font-size:12px;font-weight:700;color:#991b1b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Hard Filters (exclude if fails)</h4>
+
+        <div class="fp-row">
+          <label><input type="checkbox" id="fp-hard_company_type_enabled" {% if cfg.hard_company_type_enabled %}checked{% endif %} /> Company Type contains</label>
+          <input type="text" id="fp-hard_company_type_value" value="{{ cfg.hard_company_type_value }}" style="width:120px" />
+        </div>
+
+        <div class="fp-row">
+          <label><input type="checkbox" id="fp-hard_age_enabled" {% if cfg.hard_age_enabled %}checked{% endif %} /> Company Age &ge;</label>
+          <input type="number" id="fp-hard_age_min_years" value="{{ cfg.hard_age_min_years }}" min="0" max="100" style="width:70px" />
+          <span class="fp-unit">years</span>
+        </div>
+
+        <div class="fp-row">
+          <label><input type="checkbox" id="fp-hard_revenue_enabled" {% if cfg.hard_revenue_enabled %}checked{% endif %} /> Revenue (SEK)</label>
+          <input type="number" id="fp-hard_revenue_min" value="{{ cfg.hard_revenue_min }}" min="0" step="100000" style="width:110px" />
+          <span class="fp-unit">&ndash;</span>
+          <input type="number" id="fp-hard_revenue_max" value="{{ cfg.hard_revenue_max }}" min="0" step="100000" style="width:110px" />
+        </div>
+
+        <div class="fp-row">
+          <label><input type="checkbox" id="fp-hard_employees_enabled" {% if cfg.hard_employees_enabled %}checked{% endif %} /> Employees</label>
+          <input type="number" id="fp-hard_employees_min" value="{{ cfg.hard_employees_min }}" min="0" style="width:70px" />
+          <span class="fp-unit">&ndash;</span>
+          <input type="number" id="fp-hard_employees_max" value="{{ cfg.hard_employees_max }}" min="0" style="width:70px" />
+        </div>
+
+        <div class="fp-row">
+          <label><input type="checkbox" id="fp-hard_sni_enabled" {% if cfg.hard_sni_enabled %}checked{% endif %} /> SNI Code Match</label>
+        </div>
+        <textarea id="fp-sni_codes_text" style="width:100%;height:60px;font-size:11px;font-family:monospace;padding:6px;border:1px solid #d1d5db;border-radius:4px;margin-bottom:6px" placeholder="Comma or newline separated">{{ cfg.sni_codes | join(', ') }}</textarea>
+
+        <div class="fp-row">
+          <label><input type="checkbox" id="fp-hard_profitability_enabled" {% if cfg.hard_profitability_enabled %}checked{% endif %} /> Profitability (Result &gt; 0)</label>
+        </div>
+      </div>
+
+      <!-- Soft filters column -->
+      <div>
+        <h4 style="font-size:12px;font-weight:700;color:#713f12;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Soft Filters (&minus;1 score if fails)</h4>
+
+        <div class="fp-row">
+          <label><input type="checkbox" id="fp-soft_margin_enabled" {% if cfg.soft_margin_enabled %}checked{% endif %} /> Profit Margin &ge;</label>
+          <input type="number" id="fp-soft_margin_min_pct" value="{{ cfg.soft_margin_min_pct }}" min="0" max="100" step="0.5" style="width:70px" />
+          <span class="fp-unit">%</span>
+        </div>
+
+        <div class="fp-row">
+          <label><input type="checkbox" id="fp-soft_soliditet_enabled" {% if cfg.soft_soliditet_enabled %}checked{% endif %} /> Soliditet &ge;</label>
+          <input type="number" id="fp-soft_soliditet_min_pct" value="{{ cfg.soft_soliditet_min_pct }}" min="0" max="100" step="0.5" style="width:70px" />
+          <span class="fp-unit">%</span>
+        </div>
+
+        <div class="fp-row">
+          <label><input type="checkbox" id="fp-soft_recency_enabled" {% if cfg.soft_recency_enabled %}checked{% endif %} /> Data Recency within</label>
+          <input type="number" id="fp-soft_recency_months" value="{{ cfg.soft_recency_months }}" min="1" max="60" style="width:70px" />
+          <span class="fp-unit">months</span>
+        </div>
+
+        <div class="fp-row">
+          <label><input type="checkbox" id="fp-soft_county_enabled" {% if cfg.soft_county_enabled %}checked{% endif %} /> County (LÄN)</label>
+        </div>
+        <input type="text" id="fp-soft_county_values_text" value="{{ cfg.soft_county_values | join(', ') }}"
+               placeholder="e.g. Stockholms län, Västra Götalands län" style="width:100%;padding:6px;border:1px solid #d1d5db;border-radius:4px;font-size:12px" />
+      </div>
+
+    </div>
+  </div>
+</div>
 
 <!-- Filter bar -->
 <div class="filter-bar">
@@ -327,6 +426,145 @@ function closePopover() {
 
 document.addEventListener('click', closePopover);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closePopover(); });
+
+// Filter panel toggle
+function toggleFilterPanel() {
+  const panel = document.getElementById('filter-panel');
+  const btn = document.getElementById('toggle-filters-btn');
+  if (panel.style.display === 'none') {
+    panel.style.display = '';
+    btn.textContent = 'Hide Filters';
+  } else {
+    panel.style.display = 'none';
+    btn.textContent = 'Edit Filters';
+  }
+}
+
+// Load preset into filter panel fields
+const presetSelect = document.getElementById('preset-select');
+if (presetSelect) {
+  presetSelect.addEventListener('change', function() {
+    if (!this.value) return;
+    try {
+      const cfg = JSON.parse(this.value);
+      // Populate all fields from preset
+      const fields = [
+        'hard_company_type_enabled', 'hard_age_enabled', 'hard_revenue_enabled',
+        'hard_employees_enabled', 'hard_sni_enabled', 'hard_profitability_enabled',
+        'soft_margin_enabled', 'soft_soliditet_enabled', 'soft_recency_enabled',
+        'soft_county_enabled'
+      ];
+      fields.forEach(f => {
+        const el = document.getElementById('fp-' + f);
+        if (el) el.checked = !!cfg[f];
+      });
+      const numFields = {
+        'hard_age_min_years': 'hard_age_min_years',
+        'hard_revenue_min': 'hard_revenue_min',
+        'hard_revenue_max': 'hard_revenue_max',
+        'hard_employees_min': 'hard_employees_min',
+        'hard_employees_max': 'hard_employees_max',
+        'soft_margin_min_pct': 'soft_margin_min_pct',
+        'soft_soliditet_min_pct': 'soft_soliditet_min_pct',
+        'soft_recency_months': 'soft_recency_months',
+      };
+      for (const [elId, cfgKey] of Object.entries(numFields)) {
+        const el = document.getElementById('fp-' + elId);
+        if (el && cfg[cfgKey] !== undefined) el.value = cfg[cfgKey];
+      }
+      const ctEl = document.getElementById('fp-hard_company_type_value');
+      if (ctEl && cfg.hard_company_type_value) ctEl.value = cfg.hard_company_type_value;
+      const sniEl = document.getElementById('fp-sni_codes_text');
+      if (sniEl && cfg.sni_codes) sniEl.value = Array.isArray(cfg.sni_codes) ? cfg.sni_codes.join(', ') : cfg.sni_codes;
+      const countyEl = document.getElementById('fp-soft_county_values_text');
+      if (countyEl && cfg.soft_county_values) countyEl.value = Array.isArray(cfg.soft_county_values) ? cfg.soft_county_values.join(', ') : cfg.soft_county_values;
+      showFlash('Preset loaded into filter panel', 'info');
+    } catch(e) { console.error('Failed to parse preset', e); }
+    this.value = '';
+  });
+}
+
+// Collect filter config from panel inputs
+function collectFilterConfig() {
+  const sniRaw = document.getElementById('fp-sni_codes_text').value;
+  const sniCodes = sniRaw.replace(/\n/g, ',').split(',').map(s => s.trim()).filter(Boolean);
+  const countyRaw = document.getElementById('fp-soft_county_values_text').value;
+  const countyValues = countyRaw.split(',').map(s => s.trim()).filter(Boolean);
+
+  const revMin = parseInt(document.getElementById('fp-hard_revenue_min').value) || 3000000;
+  const revMax = parseInt(document.getElementById('fp-hard_revenue_max').value) || 30000000;
+  const empMin = parseInt(document.getElementById('fp-hard_employees_min').value) || 3;
+  const empMax = parseInt(document.getElementById('fp-hard_employees_max').value) || 30;
+  const ageMin = parseInt(document.getElementById('fp-hard_age_min_years').value) || 15;
+
+  return {
+    hard_company_type_enabled: document.getElementById('fp-hard_company_type_enabled').checked,
+    hard_company_type_value: document.getElementById('fp-hard_company_type_value').value || 'Aktiebolag',
+    hard_age_enabled: document.getElementById('fp-hard_age_enabled').checked,
+    hard_age_min_years: ageMin,
+    hard_revenue_enabled: document.getElementById('fp-hard_revenue_enabled').checked,
+    hard_revenue_min: revMin,
+    hard_revenue_max: revMax,
+    hard_employees_enabled: document.getElementById('fp-hard_employees_enabled').checked,
+    hard_employees_min: empMin,
+    hard_employees_max: empMax,
+    hard_sni_enabled: document.getElementById('fp-hard_sni_enabled').checked,
+    sni_codes: sniCodes,
+    hard_profitability_enabled: document.getElementById('fp-hard_profitability_enabled').checked,
+    soft_margin_enabled: document.getElementById('fp-soft_margin_enabled').checked,
+    soft_margin_min_pct: parseFloat(document.getElementById('fp-soft_margin_min_pct').value) || 10.0,
+    soft_soliditet_enabled: document.getElementById('fp-soft_soliditet_enabled').checked,
+    soft_soliditet_min_pct: parseFloat(document.getElementById('fp-soft_soliditet_min_pct').value) || 50.0,
+    soft_recency_enabled: document.getElementById('fp-soft_recency_enabled').checked,
+    soft_recency_months: parseInt(document.getElementById('fp-soft_recency_months').value) || 18,
+    soft_county_enabled: document.getElementById('fp-soft_county_enabled').checked,
+    soft_county_values: countyValues,
+    revenue_min_msek: Math.floor(revMin / 1000000),
+    revenue_max_msek: Math.floor(revMax / 1000000),
+    employees_min: empMin,
+    employees_max: empMax,
+    min_age_years: ageMin,
+  };
+}
+
+// Apply new filters via API and reload
+async function applyNewFilters() {
+  const batchId = {{ batch_id or 'null' }};
+  if (!batchId) {
+    showFlash('No batch selected', 'danger');
+    return;
+  }
+
+  const config = collectFilterConfig();
+  const btn = document.querySelector('#filter-panel .btn-primary');
+  const origText = btn.textContent;
+  btn.textContent = 'Applying…';
+  btn.disabled = true;
+
+  try {
+    const resp = await fetch(`/api/batch/${batchId}/refilter`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({config: config}),
+    });
+    const data = await resp.json();
+    if (resp.ok && data.ok) {
+      showFlash(`Filters applied: ${data.passed} of ${data.total} companies passed`, 'success');
+      // Reload the page to show updated results
+      setTimeout(() => {
+        window.location.href = `/results?batch_id=${batchId}`;
+      }, 500);
+    } else {
+      showFlash(data.error || 'Failed to apply filters', 'danger');
+      btn.textContent = origText;
+      btn.disabled = false;
+    }
+  } catch(e) {
+    showFlash('Network error applying filters', 'danger');
+    btn.textContent = origText;
+    btn.disabled = false;
+  }
+}
 
 // Status update via AJAX
 async function updateStatus(orgnr, newStatus) {
