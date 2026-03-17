@@ -14,7 +14,6 @@ from app.database import get_db
 from app.models import Batch, BatchCompany, Company, Phase2Job
 from app.services.phase2a import (
     cancel_job,
-    get_bokslut_url,
     pause_job,
     resume_job,
     run_phase2a_job,
