@@ -201,11 +201,7 @@
           data-batch="{{ row.batch_id or '' }}"
         >
           <td>
-            {% if row.allabolag_url %}
-            <a href="{{ row.allabolag_url }}" target="_blank" rel="noopener" style="color:#2563eb;font-weight:500">{{ row.bolagsnamn or '—' }}</a>
-            {% else %}
-            <span style="font-weight:500">{{ row.bolagsnamn or '—' }}</span>
-            {% endif %}
+            <a href="/company/{{ row.orgnr }}" style="color:#2563eb;font-weight:500">{{ row.bolagsnamn or '—' }}</a>
             {% if row.previously_passed %}
             <span class="badge badge-orange" title="Previously marked as Pass in an earlier batch">⚠ Previously passed</span>
             {% endif %}

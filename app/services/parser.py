@@ -154,7 +154,7 @@ def _extract_hyperlinks_from_xlsx(file_bytes: bytes, sheet_index: int = 0) -> di
 def _fallback_url(orgnr: str) -> str:
     """Construct fallback Allabolag URL from ORG.NR."""
     orgnr_clean = orgnr.replace("-", "").strip()
-    return f"https://www.allabolag.se/{orgnr_clean}/bokslut"
+    return f"https://www.allabolag.se/bokslut/{orgnr_clean}"
 
 
 # ---------------------------------------------------------------------------
