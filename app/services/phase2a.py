@@ -43,38 +43,47 @@ DEFAULT_PHASE2A_FILTERS = {
 _job_control: dict[int, dict[str, bool]] = {}
 
 
-def get_bokslut_url(allabolag_url: str) -> str:
+async def resolve_bokslut_url(client: httpx.AsyncClient, allabolag_url: str) -> str:
     """
-    Convert a company's Allabolag URL to the /bokslut page URL.
+    Resolve the correct /bokslut URL for a company.
 
-    Input formats:
-      https://www.allabolag.se/foretag/{slug}/{city}/{category}/{id}/
-      https://www.allabolag.se/bokslut/{orgnr}  (fallback, already correct)
-      https://www.allabolag.se/{orgnr}/bokslut   (legacy fallback)
+    The stored allabolag_url (from Excel hyperlinks) uses the org number as the
+    last path segment, but the Allabolag /bokslut page uses an internal ID.
+    We send a HEAD request (with redirect following) to the /foretag/ URL to
+    discover the canonical URL with the correct internal ID, then derive the
+    /bokslut/ URL by path replacement.
 
-    Output format:
-      https://www.allabolag.se/bokslut/{slug}/{city}/{category}/{id}
+    Falls back to naive replacement if the HEAD request fails.
     """
     if not allabolag_url:
         return ""
 
     url = allabolag_url.rstrip("/")
 
-    # If URL contains /foretag/, replace with /bokslut/
-    if "/foretag/" in url:
-        return url.replace("/foretag/", "/bokslut/", 1)
-
-    # If URL already has /bokslut/ in the right place, use as-is
+    # If URL already points to /bokslut/, assume it's correct
     parsed = urlparse(url)
     if parsed.path.startswith("/bokslut/"):
         return url
 
-    # Legacy fallback format: /{orgnr}/bokslut → /bokslut/{orgnr}
-    if parsed.path.endswith("/bokslut"):
-        orgnr_part = parsed.path.replace("/bokslut", "").lstrip("/")
-        return f"https://www.allabolag.se/bokslut/{orgnr_part}"
+    # HEAD request to resolve redirects and get canonical URL with internal ID
+    try:
+        resp = await client.head(url, follow_redirects=True, timeout=15.0)
+        resp.raise_for_status()
 
-    # Last resort: append /bokslut path segment after domain
+        # The final URL after redirects contains the correct internal ID
+        # e.g., /foretag/slug/city/category/INTERNAL_ID
+        final_url = str(resp.url).rstrip("/")
+
+        if "/foretag/" in final_url:
+            return final_url.replace("/foretag/", "/bokslut/", 1)
+
+    except Exception as e:
+        logger.warning("Could not resolve bokslut URL from company page %s: %s", url, e)
+
+    # Fallback: naive replacement on the original URL
+    if "/foretag/" in url:
+        return url.replace("/foretag/", "/bokslut/", 1)
+
     path = parsed.path.lstrip("/")
     return f"https://www.allabolag.se/bokslut/{path}"
 
@@ -377,12 +386,26 @@ async def scrape_company_bokslut(
     """
     Scrape the /bokslut page for a single company.
 
+    First resolves the correct bokslut URL (which uses an internal Allabolag ID,
+    different from the org number in the stored URL), then fetches and parses it.
+
     Returns a dict with keys: "historical", "error", "url_used".
     """
-    bokslut_url = get_bokslut_url(company.allabolag_url or "")
-    if not bokslut_url:
+    if not company.allabolag_url:
         return {"historical": None, "error": "No Allabolag URL", "url_used": ""}
 
+    # Step 1: Resolve the correct bokslut URL (needs HTTP request to company page)
+    try:
+        bokslut_url = await resolve_bokslut_url(client, company.allabolag_url)
+    except Exception as e:
+        return {"historical": None, "error": f"URL resolution failed: {e}", "url_used": company.allabolag_url}
+
+    if not bokslut_url:
+        return {"historical": None, "error": "Could not resolve bokslut URL", "url_used": company.allabolag_url}
+
+    logger.info("Resolved bokslut URL for %s: %s", company.orgnr, bokslut_url)
+
+    # Step 2: Fetch the bokslut page
     last_error = None
     for attempt in range(MAX_RETRIES):
         try:
