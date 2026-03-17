@@ -49,10 +49,11 @@ async def resolve_bokslut_url(client: httpx.AsyncClient, allabolag_url: str) -> 
 
     The stored allabolag_url (from Excel hyperlinks) uses the org number as the
     last path segment, but the Allabolag /bokslut page uses an internal ID.
-    We cannot simply replace /foretag/ with /bokslut/ — we must fetch the
-    company's page and find the bokslut link with the correct internal ID.
+    We send a HEAD request (with redirect following) to the /foretag/ URL to
+    discover the canonical URL with the correct internal ID, then derive the
+    /bokslut/ URL by path replacement.
 
-    Falls back to naive replacement if the company page cannot be fetched.
+    Falls back to naive replacement if the HEAD request fails.
     """
     if not allabolag_url:
         return ""
@@ -64,31 +65,22 @@ async def resolve_bokslut_url(client: httpx.AsyncClient, allabolag_url: str) -> 
     if parsed.path.startswith("/bokslut/"):
         return url
 
-    # Fetch the company page and look for the bokslut link
+    # HEAD request to resolve redirects and get canonical URL with internal ID
     try:
-        resp = await client.get(url, follow_redirects=True, timeout=15.0)
+        resp = await client.head(url, follow_redirects=True, timeout=15.0)
         resp.raise_for_status()
 
-        # After following redirects, the final URL may have the correct internal ID
+        # The final URL after redirects contains the correct internal ID
         # e.g., /foretag/slug/city/category/INTERNAL_ID
         final_url = str(resp.url).rstrip("/")
 
-        # Look for a direct bokslut link in the page HTML
-        soup = BeautifulSoup(resp.text, "lxml")
-        for a_tag in soup.find_all("a", href=True):
-            href = a_tag["href"]
-            if "/bokslut/" in href and "allabolag.se" in href:
-                # Found a direct bokslut link
-                return href.rstrip("/")
-
-        # Fallback: replace /foretag/ with /bokslut/ in the final (redirected) URL
         if "/foretag/" in final_url:
             return final_url.replace("/foretag/", "/bokslut/", 1)
 
     except Exception as e:
         logger.warning("Could not resolve bokslut URL from company page %s: %s", url, e)
 
-    # Last resort: naive replacement on the original URL
+    # Fallback: naive replacement on the original URL
     if "/foretag/" in url:
         return url.replace("/foretag/", "/bokslut/", 1)
 
