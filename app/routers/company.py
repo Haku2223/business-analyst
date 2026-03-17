@@ -45,6 +45,18 @@ async def company_detail(request: Request, orgnr: str):
             )
             events = events_result.scalars().all()
 
+        # Prepare historical financials for template
+        historical = company.historical_financials if company else None
+        phase2a_results = None
+        if company and company.extra_data:
+            ed = company.extra_data
+            if "phase2a_passed" in ed:
+                phase2a_results = {
+                    "passed": ed.get("phase2a_passed"),
+                    "hard_fails": ed.get("phase2a_hard_fails", []),
+                    "soft_fails": ed.get("phase2a_soft_fails", []),
+                }
+
         return templates.TemplateResponse(
             "company.html",
             {
@@ -54,6 +66,8 @@ async def company_detail(request: Request, orgnr: str):
                 "company": company,
                 "notes": notes,
                 "events": events,
+                "historical": historical or [],
+                "phase2a_results": phase2a_results,
             },
         )
 
