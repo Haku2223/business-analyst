@@ -2,171 +2,472 @@
 {% block title %}Enrich (Phase 2){% endblock %}
 {% block topbar_title %}Phase 2 — Historical Enrichment{% endblock %}
 
+{% block head %}
+<style>
+  .enrich-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; }
+  .stat-label { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+  .stat-value { font-size: 28px; font-weight: 700; }
+  .stat-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  .progress-wrap { margin: 20px 0; }
+  .progress-bar-bg { width: 100%; height: 24px; background: #e5e7eb; border-radius: 12px; overflow: hidden; position: relative; }
+  .progress-bar-fill { height: 100%; background: linear-gradient(90deg, #2563eb, #60a5fa); border-radius: 12px; transition: width .3s ease; min-width: 0; }
+  .progress-text { position: absolute; top: 0; left: 0; right: 0; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: #1a1f2e; }
+
+  .log-panel { background: #1a1f2e; color: #d1d5db; border-radius: var(--radius); padding: 16px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; line-height: 1.6; max-height: 350px; overflow-y: auto; margin-top: 16px; }
+  .log-entry { white-space: pre-wrap; word-break: break-all; }
+  .log-entry .time { color: #6b7280; }
+  .log-entry .error { color: #f87171; }
+  .log-entry .success { color: #4ade80; }
+  .log-entry .info { color: #60a5fa; }
+
+  .error-table { margin-top: 16px; }
+  .error-table td { font-size: 12px; }
+
+  .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .controls .btn { min-width: 120px; justify-content: center; }
+
+  .filter-section { margin-top: 24px; }
+  .filter-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .filter-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #f9fafb; border: 1px solid var(--border); border-radius: var(--radius); }
+  .filter-item label { font-size: 13px; flex: 1; }
+  .filter-item input[type="number"] { width: 70px; padding: 4px 6px; font-size: 13px; border: 1px solid var(--border); border-radius: 4px; }
+  .filter-item input[type="checkbox"] { width: 16px; height: 16px; flex-shrink: 0; }
+
+  .batch-select { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+  .batch-select select { max-width: 400px; }
+
+  @media (max-width: 768px) {
+    .enrich-grid { grid-template-columns: 1fr; }
+    .filter-grid { grid-template-columns: 1fr; }
+  }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="card" style="max-width:800px;margin:0 auto">
-  <div class="card-body" style="padding:24px">
-    <h2 style="font-weight:600;margin-bottom:16px">Phase 2a — Historical Financial Scraping</h2>
+<!-- Batch selector -->
+{% if all_batches %}
+<div class="batch-select">
+  <label class="form-label" style="margin-bottom:0">Batch:</label>
+  <select id="batchSelect" class="form-control" style="max-width:400px">
+    {% for b in all_batches %}
+    <option value="{{ b.id }}" {% if b.id == batch_id %}selected{% endif %}>
+      {{ b.filename }} ({{ b.upload_timestamp.strftime('%Y-%m-%d %H:%M') }}) — {{ b.row_count_phase1 or 0 }} passed Phase 1
+    </option>
+    {% endfor %}
+  </select>
+</div>
+{% endif %}
 
-    {% if batches %}
-    <div style="margin-bottom:20px">
-      <label style="font-weight:500;display:block;margin-bottom:4px">Select batch:</label>
-      <select id="batchSelect" style="padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);width:100%;max-width:400px">
-        {% for b in batches %}
-        <option value="{{ b.id }}" {% if b.id == current_batch_id %}selected{% endif %}>
-          {{ b.filename }} ({{ b.upload_timestamp.strftime('%Y-%m-%d %H:%M') }}) — {{ b.row_count_phase1 or 0 }} passed Phase 1
-        </option>
-        {% endfor %}
-      </select>
+<!-- Stats overview -->
+<div class="enrich-grid">
+  <div class="stat-card">
+    <div class="stat-label">Phase 1 Survivors</div>
+    <div class="stat-value" id="statPhase1">{{ phase1_count }}</div>
+    <div class="stat-sub">Companies eligible for enrichment</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Enriched</div>
+    <div class="stat-value" style="color:var(--success)" id="statEnriched">{{ enriched_count }}</div>
+    <div class="stat-sub">
+      <span id="statPending">{{ pending_count }}</span> pending,
+      <span id="statFailed">{{ failed_count }}</span> failed
     </div>
-
-    <div style="background:var(--bg);padding:16px;border-radius:var(--radius);margin-bottom:20px">
-      <p><strong>{{ eligible_count }}</strong> companies passed Phase 1 and are eligible for enrichment.</p>
-      <p class="text-muted" style="font-size:13px;margin-top:4px">
-        Estimated time: ~{{ (eligible_count * 0.6 / 60)|round(1) }} minutes (rate-limited to 1 request / 0.5s).
-      </p>
-    </div>
-
-    <div style="display:flex;gap:8px;margin-bottom:24px">
-      <button onclick="startEnrichment()" class="btn btn-primary" id="btnStart">Start Enrichment</button>
-      <button onclick="pauseJob()" class="btn" id="btnPause" style="display:none">Pause</button>
-      <button onclick="resumeJob()" class="btn btn-primary" id="btnResume" style="display:none">Resume</button>
-      <button onclick="cancelJob()" class="btn" style="display:none;color:var(--danger)" id="btnCancel">Cancel</button>
-    </div>
-    {% else %}
-    <p class="text-muted">No batches uploaded yet. <a href="/upload">Upload a file</a> first.</p>
-    {% endif %}
-
-    <!-- Progress -->
-    <div id="progressSection" style="display:none;margin-bottom:24px">
-      <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-        <span id="progressLabel">0 / 0 companies</span>
-        <span id="progressPct">0%</span>
-      </div>
-      <div style="background:var(--border);border-radius:4px;height:8px;overflow:hidden">
-        <div id="progressBar" style="background:var(--primary);height:100%;width:0%;transition:width .3s"></div>
-      </div>
-      <div id="statusText" class="text-muted" style="font-size:13px;margin-top:6px"></div>
-    </div>
-
-    <!-- Error log -->
-    <div id="errorSection" style="display:none;margin-bottom:24px">
-      <h3 style="font-weight:600;margin-bottom:8px">Errors</h3>
-      <div id="errorLog" style="background:#fef2f2;border:1px solid #fecaca;border-radius:var(--radius);padding:12px;max-height:200px;overflow-y:auto;font-size:13px"></div>
-    </div>
-
-    <!-- Job history -->
-    {% if jobs %}
-    <h3 style="font-weight:600;margin-bottom:8px;margin-top:24px">Job History</h3>
-    <table class="data-table" style="width:100%">
-      <thead><tr>
-        <th>ID</th><th>Batch</th><th>Status</th><th>Progress</th><th>Started</th><th>Errors</th>
-      </tr></thead>
-      <tbody>
-      {% for j in jobs %}
-      <tr>
-        <td>{{ j.id }}</td>
-        <td>{{ j.batch_id }}</td>
-        <td>
-          <span class="badge badge-{% if j.status == 'completed' %}success{% elif j.status == 'running' %}primary{% elif j.status == 'failed' %}danger{% else %}muted{% endif %}">
-            {{ j.status }}
-          </span>
-        </td>
-        <td>{{ j.companies_done }}/{{ j.companies_total }}</td>
-        <td>{{ j.started_at.strftime('%Y-%m-%d %H:%M') if j.started_at else '-' }}</td>
-        <td>{{ (j.errors_json|length) if j.errors_json else 0 }}</td>
-      </tr>
-      {% endfor %}
-      </tbody>
-    </table>
-    {% endif %}
   </div>
 </div>
 
+<!-- Job controls card -->
+<div class="card">
+  <div class="card-header">
+    <span class="card-title">Enrichment Job Control</span>
+    <span class="badge badge-grey" id="jobStatusBadge">No active job</span>
+  </div>
+  <div class="card-body">
+    <!-- Estimated time -->
+    <div id="estimateNotice" class="alert alert-info" {% if pending_count == 0 %}style="display:none"{% endif %}>
+      <strong>Estimated time:</strong> ~<span id="estMinutes">{{ est_minutes }}</span> minutes
+      for <span id="estCount">{{ pending_count }}</span> companies
+      (rate limited to 1 request / 0.5s with jitter).
+    </div>
+
+    <!-- Controls -->
+    <div class="controls">
+      <button id="btnStart" class="btn btn-primary btn-lg" onclick="startJob()">
+        Start Phase 2a
+      </button>
+      <button id="btnPause" class="btn btn-secondary btn-lg" onclick="pauseJob()" style="display:none">
+        Pause
+      </button>
+      <button id="btnResume" class="btn btn-success btn-lg" onclick="resumeJob()" style="display:none">
+        Resume
+      </button>
+      <label style="font-size:13px;display:flex;align-items:center;gap:6px">
+        <input type="checkbox" id="chkRerun"> Re-run already enriched companies
+      </label>
+    </div>
+
+    <!-- Progress bar -->
+    <div class="progress-wrap" id="progressWrap" style="display:none">
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" id="progressFill" style="width:0%"></div>
+        <div class="progress-text" id="progressText">0 / 0 (0%)</div>
+      </div>
+    </div>
+
+    <!-- Live log -->
+    <div class="log-panel" id="logPanel" style="display:none">
+      <div id="logContent"></div>
+    </div>
+
+    <!-- Error summary -->
+    <div id="errorSection" style="display:none;margin-top:16px">
+      <h4 style="font-size:14px;font-weight:600;margin-bottom:8px">Errors</h4>
+      <div class="table-wrap">
+        <table class="data-table error-table">
+          <thead>
+            <tr><th>Time</th><th>Org Nr</th><th>Error</th></tr>
+          </thead>
+          <tbody id="errorTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Phase 2a Filter Configuration -->
+<div class="card filter-section">
+  <div class="card-header">
+    <span class="card-title">Phase 2a Filter Thresholds</span>
+  </div>
+  <div class="card-body">
+    <p class="text-muted" style="margin-bottom:12px;font-size:13px">
+      These filters are applied to historical financial data after scraping.
+      Hard filters exclude companies; soft filters add warning flags.
+    </p>
+    <div class="filter-grid">
+      <!-- Hard: Profitability 3/5 -->
+      <div class="filter-item">
+        <input type="checkbox" id="cfgProfit3of5" checked>
+        <label>Profitable in N of last 5 years (Hard)</label>
+        <input type="number" id="cfgProfitMinYears" value="3" min="1" max="5">
+      </div>
+      <!-- Hard: Revenue decline -->
+      <div class="filter-item">
+        <input type="checkbox" id="cfgRevDecline" checked>
+        <label>Max revenue decline % (2yr, Hard)</label>
+        <input type="number" id="cfgRevDeclineMax" value="15" min="0" max="100" step="1">
+      </div>
+      <!-- Soft: Employee trend -->
+      <div class="filter-item">
+        <input type="checkbox" id="cfgEmpTrend" checked>
+        <label>Max employee shrink % (5yr, Soft)</label>
+        <input type="number" id="cfgEmpShrinkMax" value="40" min="0" max="100" step="1">
+      </div>
+      <!-- Soft: Revenue CAGR -->
+      <div class="filter-item">
+        <input type="checkbox" id="cfgRevCAGR" checked>
+        <label>Min revenue CAGR % (5yr, Soft)</label>
+        <input type="number" id="cfgRevCAGRMin" value="-5" min="-100" max="100" step="1">
+      </div>
+      <!-- Soft: Consistent margin -->
+      <div class="filter-item">
+        <input type="checkbox" id="cfgMarginConsist" checked>
+        <label>Margin >N% in M of 5 years (Soft)</label>
+        <input type="number" id="cfgMarginMin" value="5" min="0" max="100" step="1">
+      </div>
+      <div class="filter-item">
+        <input type="checkbox" disabled checked>
+        <label>Min years above margin threshold</label>
+        <input type="number" id="cfgMarginMinYears" value="3" min="1" max="5">
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Past jobs -->
+{% if jobs %}
+<div class="card" style="margin-top:24px">
+  <div class="card-header">
+    <span class="card-title">Past Enrichment Jobs</span>
+  </div>
+  <div class="card-body">
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Status</th>
+            <th>Started</th>
+            <th>Completed</th>
+            <th>Progress</th>
+            <th>Errors</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for job in jobs %}
+          <tr>
+            <td>{{ job.id }}</td>
+            <td>
+              {% if job.status == 'completed' %}
+                <span class="badge badge-green">Completed</span>
+              {% elif job.status == 'running' %}
+                <span class="badge badge-blue">Running</span>
+              {% elif job.status == 'paused' %}
+                <span class="badge badge-orange">Paused</span>
+              {% elif job.status == 'failed' %}
+                <span class="badge badge-red">Failed</span>
+              {% else %}
+                <span class="badge badge-grey">{{ job.status }}</span>
+              {% endif %}
+            </td>
+            <td>{{ job.started_at.strftime('%Y-%m-%d %H:%M') if job.started_at else '-' }}</td>
+            <td>{{ job.completed_at.strftime('%Y-%m-%d %H:%M') if job.completed_at else '-' }}</td>
+            <td>{{ job.companies_done }} / {{ job.companies_total }}</td>
+            <td>{{ (job.errors_json | length) if job.errors_json else 0 }}</td>
+            <td>
+              {% if job.status == 'paused' %}
+                <button class="btn btn-sm btn-success" onclick="resumeJobById({{ job.id }})">Resume</button>
+              {% elif job.status in ('running', 'pending') %}
+                <button class="btn btn-sm btn-secondary" onclick="monitorJob({{ job.id }})">Monitor</button>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
 <script>
 let currentJobId = null;
 let pollInterval = null;
 
-function startEnrichment() {
+function getFilterConfig() {
+  return {
+    p2a_hard_profitability_3of5_enabled: document.getElementById('cfgProfit3of5').checked,
+    p2a_hard_profitability_min_years: parseInt(document.getElementById('cfgProfitMinYears').value) || 3,
+    p2a_hard_revenue_decline_enabled: document.getElementById('cfgRevDecline').checked,
+    p2a_hard_revenue_max_decline_pct: parseFloat(document.getElementById('cfgRevDeclineMax').value) || 15,
+    p2a_soft_employee_trend_enabled: document.getElementById('cfgEmpTrend').checked,
+    p2a_soft_employee_shrink_max_pct: parseFloat(document.getElementById('cfgEmpShrinkMax').value) || 40,
+    p2a_soft_revenue_cagr_enabled: document.getElementById('cfgRevCAGR').checked,
+    p2a_soft_revenue_cagr_min_pct: parseFloat(document.getElementById('cfgRevCAGRMin').value) || -5,
+    p2a_soft_margin_consistency_enabled: document.getElementById('cfgMarginConsist').checked,
+    p2a_soft_margin_min_pct: parseFloat(document.getElementById('cfgMarginMin').value) || 5,
+    p2a_soft_margin_min_years: parseInt(document.getElementById('cfgMarginMinYears').value) || 3,
+  };
+}
+
+async function startJob() {
   const batchId = document.getElementById('batchSelect')?.value;
-  if (!batchId) return;
+  if (!batchId) { showFlash('No batch selected', 'danger'); return; }
 
-  fetch('/api/enrich/start', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({batch_id: parseInt(batchId)})
-  })
-  .then(r => r.json())
-  .then(data => {
-    if (data.error) { alert(data.error); return; }
+  const rerun = document.getElementById('chkRerun').checked;
+  const config = getFilterConfig();
+
+  document.getElementById('btnStart').disabled = true;
+
+  try {
+    const resp = await fetch('/api/enrich/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ batch_id: parseInt(batchId), rerun, config }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      showFlash(data.error || 'Failed to start job', 'danger');
+      document.getElementById('btnStart').disabled = false;
+      return;
+    }
+
     currentJobId = data.job_id;
-    document.getElementById('btnStart').style.display = 'none';
-    document.getElementById('btnPause').style.display = '';
-    document.getElementById('btnCancel').style.display = '';
-    document.getElementById('progressSection').style.display = '';
+    showFlash(`Job started: ${data.companies_count} companies, ~${data.estimated_minutes} min`, 'success');
+    showJobUI('running');
     startPolling();
-  });
+  } catch (e) {
+    showFlash('Network error: ' + e.message, 'danger');
+    document.getElementById('btnStart').disabled = false;
+  }
 }
 
-function pauseJob() {
+async function pauseJob() {
   if (!currentJobId) return;
-  fetch('/api/enrich/pause/' + currentJobId, {method: 'POST'});
-  document.getElementById('btnPause').style.display = 'none';
-  document.getElementById('btnResume').style.display = '';
+  try {
+    const resp = await fetch('/api/enrich/pause', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job_id: currentJobId }),
+    });
+    if (resp.ok) {
+      showJobUI('paused');
+      showFlash('Job paused', 'warning');
+    }
+  } catch (e) {
+    showFlash('Error pausing job: ' + e.message, 'danger');
+  }
 }
 
-function resumeJob() {
+async function resumeJob() {
   if (!currentJobId) return;
-  fetch('/api/enrich/resume/' + currentJobId, {method: 'POST'});
-  document.getElementById('btnResume').style.display = 'none';
-  document.getElementById('btnPause').style.display = '';
+  try {
+    const resp = await fetch('/api/enrich/resume', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job_id: currentJobId }),
+    });
+    if (resp.ok) {
+      showJobUI('running');
+      showFlash('Job resumed', 'success');
+      startPolling();
+    }
+  } catch (e) {
+    showFlash('Error resuming job: ' + e.message, 'danger');
+  }
 }
 
-function cancelJob() {
-  if (!currentJobId) return;
-  fetch('/api/enrich/cancel/' + currentJobId, {method: 'POST'});
-  stopPolling();
-  document.getElementById('statusText').textContent = 'Job cancelled.';
-  document.getElementById('btnPause').style.display = 'none';
-  document.getElementById('btnResume').style.display = 'none';
-  document.getElementById('btnCancel').style.display = 'none';
-  document.getElementById('btnStart').style.display = '';
+function resumeJobById(jobId) {
+  currentJobId = jobId;
+  resumeJob();
+}
+
+function monitorJob(jobId) {
+  currentJobId = jobId;
+  showJobUI('running');
+  startPolling();
+}
+
+function showJobUI(status) {
+  document.getElementById('progressWrap').style.display = '';
+  document.getElementById('logPanel').style.display = '';
+
+  const btnStart = document.getElementById('btnStart');
+  const btnPause = document.getElementById('btnPause');
+  const btnResume = document.getElementById('btnResume');
+
+  if (status === 'running') {
+    btnStart.style.display = 'none';
+    btnPause.style.display = '';
+    btnResume.style.display = 'none';
+    document.getElementById('jobStatusBadge').className = 'badge badge-blue';
+    document.getElementById('jobStatusBadge').textContent = 'Running';
+  } else if (status === 'paused') {
+    btnStart.style.display = 'none';
+    btnPause.style.display = 'none';
+    btnResume.style.display = '';
+    document.getElementById('jobStatusBadge').className = 'badge badge-orange';
+    document.getElementById('jobStatusBadge').textContent = 'Paused';
+  } else if (status === 'completed') {
+    btnStart.style.display = '';
+    btnStart.disabled = false;
+    btnPause.style.display = 'none';
+    btnResume.style.display = 'none';
+    document.getElementById('jobStatusBadge').className = 'badge badge-green';
+    document.getElementById('jobStatusBadge').textContent = 'Completed';
+    stopPolling();
+  } else if (status === 'failed') {
+    btnStart.style.display = '';
+    btnStart.disabled = false;
+    btnPause.style.display = 'none';
+    btnResume.style.display = 'none';
+    document.getElementById('jobStatusBadge').className = 'badge badge-red';
+    document.getElementById('jobStatusBadge').textContent = 'Failed';
+    stopPolling();
+  }
 }
 
 function startPolling() {
+  stopPolling();
+  pollStatus();
   pollInterval = setInterval(pollStatus, 2000);
 }
 
 function stopPolling() {
-  if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+  if (pollInterval) {
+    clearInterval(pollInterval);
+    pollInterval = null;
+  }
 }
 
-function pollStatus() {
+async function pollStatus() {
   if (!currentJobId) return;
-  fetch('/api/enrich/status/' + currentJobId)
-  .then(r => r.json())
-  .then(data => {
-    const pct = data.companies_total > 0
-      ? Math.round(data.companies_done / data.companies_total * 100) : 0;
-    document.getElementById('progressBar').style.width = pct + '%';
-    document.getElementById('progressPct').textContent = pct + '%';
-    document.getElementById('progressLabel').textContent =
-      data.companies_done + ' / ' + data.companies_total + ' companies';
-    document.getElementById('statusText').textContent = 'Status: ' + data.status;
+  try {
+    const resp = await fetch(`/api/enrich/status/${currentJobId}`);
+    if (!resp.ok) return;
+    const data = await resp.json();
 
+    // Update progress bar
+    const pct = data.progress_pct || 0;
+    document.getElementById('progressFill').style.width = pct + '%';
+    document.getElementById('progressText').textContent =
+      `${data.companies_done} / ${data.companies_total} (${pct}%)`;
+
+    // Update log
+    const logEl = document.getElementById('logContent');
+    if (data.log && data.log.length > 0) {
+      logEl.innerHTML = data.log.map(entry => {
+        const cls = entry.message.includes('ERROR') ? 'error' :
+                    entry.message.includes('complete') ? 'success' : 'info';
+        const time = entry.time ? entry.time.substring(11, 19) : '';
+        return `<div class="log-entry"><span class="time">${time}</span> <span class="${cls}">${escapeHtml(entry.message)}</span></div>`;
+      }).join('');
+      logEl.parentElement.scrollTop = logEl.parentElement.scrollHeight;
+    }
+
+    // Update errors
     if (data.errors && data.errors.length > 0) {
       document.getElementById('errorSection').style.display = '';
-      document.getElementById('errorLog').innerHTML = data.errors
-        .map(e => '<div>' + e.orgnr + ': ' + e.error + '</div>').join('');
+      const tbody = document.getElementById('errorTableBody');
+      tbody.innerHTML = data.errors.map(e =>
+        `<tr><td>${escapeHtml(e.timestamp || '')}</td><td>${escapeHtml(e.orgnr || '')}</td><td>${escapeHtml(e.error || '')}</td></tr>`
+      ).join('');
     }
 
-    if (data.status === 'completed' || data.status === 'failed') {
-      stopPolling();
-      document.getElementById('btnPause').style.display = 'none';
-      document.getElementById('btnResume').style.display = 'none';
-      document.getElementById('btnCancel').style.display = 'none';
-      document.getElementById('btnStart').style.display = '';
+    // Handle terminal states
+    if (data.status === 'completed') {
+      showJobUI('completed');
+      showFlash('Enrichment complete!', 'success');
+    } else if (data.status === 'failed') {
+      showJobUI('failed');
+      showFlash('Enrichment job failed', 'danger');
+    } else if (data.status === 'paused') {
+      showJobUI('paused');
     }
-  });
+  } catch (e) {
+    // Silently ignore poll errors
+  }
 }
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// On page load, check if there's an active job to monitor
+document.addEventListener('DOMContentLoaded', function() {
+  {% for job in jobs %}
+    {% if job.status in ('running', 'pending') %}
+      currentJobId = {{ job.id }};
+      showJobUI('running');
+      startPolling();
+    {% elif job.status == 'paused' %}
+      currentJobId = {{ job.id }};
+      showJobUI('paused');
+    {% endif %}
+    {% if not loop.first %}{% endif %}
+  {% endfor %}
+});
+
+// Batch selector change
+document.getElementById('batchSelect')?.addEventListener('change', function() {
+  window.location.href = '/enrich?batch_id=' + this.value;
+});
 </script>
 {% endblock %}
