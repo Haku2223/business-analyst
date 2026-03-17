@@ -3,15 +3,170 @@
 {% block topbar_title %}Phase 2 — Historical Enrichment{% endblock %}
 
 {% block content %}
-<div class="card" style="max-width:700px;margin:0 auto">
-  <div class="card-body" style="text-align:center;padding:48px">
-    <div style="font-size:40px;margin-bottom:12px">⚡</div>
-    <h2 style="font-weight:600;margin-bottom:8px">Phase 2 — Coming Soon</h2>
-    <p class="text-muted" style="margin-bottom:20px">
-      Phase 2a (historical financial scraping) and Phase 2b (AI business descriptions)
-      will be built in the next development phase.
-    </p>
-    <a href="/results" class="btn btn-primary">View Phase 1 Results</a>
+<div class="card" style="max-width:800px;margin:0 auto">
+  <div class="card-body" style="padding:24px">
+    <h2 style="font-weight:600;margin-bottom:16px">Phase 2a — Historical Financial Scraping</h2>
+
+    {% if batches %}
+    <div style="margin-bottom:20px">
+      <label style="font-weight:500;display:block;margin-bottom:4px">Select batch:</label>
+      <select id="batchSelect" style="padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);width:100%;max-width:400px">
+        {% for b in batches %}
+        <option value="{{ b.id }}" {% if b.id == current_batch_id %}selected{% endif %}>
+          {{ b.filename }} ({{ b.upload_timestamp.strftime('%Y-%m-%d %H:%M') }}) — {{ b.row_count_phase1 or 0 }} passed Phase 1
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div style="background:var(--bg);padding:16px;border-radius:var(--radius);margin-bottom:20px">
+      <p><strong>{{ eligible_count }}</strong> companies passed Phase 1 and are eligible for enrichment.</p>
+      <p class="text-muted" style="font-size:13px;margin-top:4px">
+        Estimated time: ~{{ (eligible_count * 0.6 / 60)|round(1) }} minutes (rate-limited to 1 request / 0.5s).
+      </p>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-bottom:24px">
+      <button onclick="startEnrichment()" class="btn btn-primary" id="btnStart">Start Enrichment</button>
+      <button onclick="pauseJob()" class="btn" id="btnPause" style="display:none">Pause</button>
+      <button onclick="resumeJob()" class="btn btn-primary" id="btnResume" style="display:none">Resume</button>
+      <button onclick="cancelJob()" class="btn" style="display:none;color:var(--danger)" id="btnCancel">Cancel</button>
+    </div>
+    {% else %}
+    <p class="text-muted">No batches uploaded yet. <a href="/upload">Upload a file</a> first.</p>
+    {% endif %}
+
+    <!-- Progress -->
+    <div id="progressSection" style="display:none;margin-bottom:24px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+        <span id="progressLabel">0 / 0 companies</span>
+        <span id="progressPct">0%</span>
+      </div>
+      <div style="background:var(--border);border-radius:4px;height:8px;overflow:hidden">
+        <div id="progressBar" style="background:var(--primary);height:100%;width:0%;transition:width .3s"></div>
+      </div>
+      <div id="statusText" class="text-muted" style="font-size:13px;margin-top:6px"></div>
+    </div>
+
+    <!-- Error log -->
+    <div id="errorSection" style="display:none;margin-bottom:24px">
+      <h3 style="font-weight:600;margin-bottom:8px">Errors</h3>
+      <div id="errorLog" style="background:#fef2f2;border:1px solid #fecaca;border-radius:var(--radius);padding:12px;max-height:200px;overflow-y:auto;font-size:13px"></div>
+    </div>
+
+    <!-- Job history -->
+    {% if jobs %}
+    <h3 style="font-weight:600;margin-bottom:8px;margin-top:24px">Job History</h3>
+    <table class="data-table" style="width:100%">
+      <thead><tr>
+        <th>ID</th><th>Batch</th><th>Status</th><th>Progress</th><th>Started</th><th>Errors</th>
+      </tr></thead>
+      <tbody>
+      {% for j in jobs %}
+      <tr>
+        <td>{{ j.id }}</td>
+        <td>{{ j.batch_id }}</td>
+        <td>
+          <span class="badge badge-{% if j.status == 'completed' %}success{% elif j.status == 'running' %}primary{% elif j.status == 'failed' %}danger{% else %}muted{% endif %}">
+            {{ j.status }}
+          </span>
+        </td>
+        <td>{{ j.companies_done }}/{{ j.companies_total }}</td>
+        <td>{{ j.started_at.strftime('%Y-%m-%d %H:%M') if j.started_at else '-' }}</td>
+        <td>{{ (j.errors_json|length) if j.errors_json else 0 }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
   </div>
 </div>
+
+<script>
+let currentJobId = null;
+let pollInterval = null;
+
+function startEnrichment() {
+  const batchId = document.getElementById('batchSelect')?.value;
+  if (!batchId) return;
+
+  fetch('/api/enrich/start', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({batch_id: parseInt(batchId)})
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.error) { alert(data.error); return; }
+    currentJobId = data.job_id;
+    document.getElementById('btnStart').style.display = 'none';
+    document.getElementById('btnPause').style.display = '';
+    document.getElementById('btnCancel').style.display = '';
+    document.getElementById('progressSection').style.display = '';
+    startPolling();
+  });
+}
+
+function pauseJob() {
+  if (!currentJobId) return;
+  fetch('/api/enrich/pause/' + currentJobId, {method: 'POST'});
+  document.getElementById('btnPause').style.display = 'none';
+  document.getElementById('btnResume').style.display = '';
+}
+
+function resumeJob() {
+  if (!currentJobId) return;
+  fetch('/api/enrich/resume/' + currentJobId, {method: 'POST'});
+  document.getElementById('btnResume').style.display = 'none';
+  document.getElementById('btnPause').style.display = '';
+}
+
+function cancelJob() {
+  if (!currentJobId) return;
+  fetch('/api/enrich/cancel/' + currentJobId, {method: 'POST'});
+  stopPolling();
+  document.getElementById('statusText').textContent = 'Job cancelled.';
+  document.getElementById('btnPause').style.display = 'none';
+  document.getElementById('btnResume').style.display = 'none';
+  document.getElementById('btnCancel').style.display = 'none';
+  document.getElementById('btnStart').style.display = '';
+}
+
+function startPolling() {
+  pollInterval = setInterval(pollStatus, 2000);
+}
+
+function stopPolling() {
+  if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+}
+
+function pollStatus() {
+  if (!currentJobId) return;
+  fetch('/api/enrich/status/' + currentJobId)
+  .then(r => r.json())
+  .then(data => {
+    const pct = data.companies_total > 0
+      ? Math.round(data.companies_done / data.companies_total * 100) : 0;
+    document.getElementById('progressBar').style.width = pct + '%';
+    document.getElementById('progressPct').textContent = pct + '%';
+    document.getElementById('progressLabel').textContent =
+      data.companies_done + ' / ' + data.companies_total + ' companies';
+    document.getElementById('statusText').textContent = 'Status: ' + data.status;
+
+    if (data.errors && data.errors.length > 0) {
+      document.getElementById('errorSection').style.display = '';
+      document.getElementById('errorLog').innerHTML = data.errors
+        .map(e => '<div>' + e.orgnr + ': ' + e.error + '</div>').join('');
+    }
+
+    if (data.status === 'completed' || data.status === 'failed') {
+      stopPolling();
+      document.getElementById('btnPause').style.display = 'none';
+      document.getElementById('btnResume').style.display = 'none';
+      document.getElementById('btnCancel').style.display = 'none';
+      document.getElementById('btnStart').style.display = '';
+    }
+  });
+}
+</script>
 {% endblock %}
