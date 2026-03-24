@@ -46,9 +46,27 @@ async def company_detail(request: Request, orgnr: str):
             events = events_result.scalars().all()
 
         # Prepare historical financials for template
-        historical = company.historical_financials if company else None
+        historical_raw = company.historical_financials if company else None
+        # historical_financials may be stored as {"years": [...], "phase2a_result": {...}}
+        # or as a plain list — normalize to a list of year dicts
+        if isinstance(historical_raw, dict):
+            historical = historical_raw.get("years", [])
+        elif isinstance(historical_raw, list):
+            historical = historical_raw
+        else:
+            historical = []
+
         phase2a_results = None
-        if company and company.extra_data:
+        # Check phase2a results inside historical_financials dict
+        if isinstance(historical_raw, dict) and "phase2a_result" in historical_raw:
+            p2a = historical_raw["phase2a_result"]
+            phase2a_results = {
+                "passed": p2a.get("passed"),
+                "hard_fails": p2a.get("hard_failed", []),
+                "soft_fails": p2a.get("soft_failed", []),
+            }
+        # Also check extra_data for backwards compatibility
+        if not phase2a_results and company and company.extra_data:
             ed = company.extra_data
             if "phase2a_passed" in ed:
                 phase2a_results = {

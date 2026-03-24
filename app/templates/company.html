@@ -115,94 +115,224 @@
 
 <!-- Historical Financials (Phase 2a) -->
 {% if historical and historical|length > 0 %}
+
+<!-- Chart -->
 <div class="card mb-3">
-  <div class="card-header"><span class="card-title">Historical Financials ({{ historical|length }} years)</span></div>
+  <div class="card-header"><span class="card-title">Revenue & Result ({{ historical|length }} years)</span></div>
   <div class="card-body">
-    <!-- Chart -->
-    <div style="margin-bottom:24px">
-      <canvas id="historicalChart" height="80"></canvas>
-    </div>
-
-    <!-- Year-by-year table -->
-    <div style="overflow-x:auto">
-      <table class="data-table" style="width:100%;font-size:12px">
-        <thead>
-          <tr>
-            <th style="text-align:left;min-width:180px">Metric</th>
-            {% for year in historical %}
-            <th style="text-align:right;min-width:100px">{{ year.period or 'Year ' ~ loop.index }}</th>
-            {% endfor %}
-          </tr>
-        </thead>
-        <tbody>
-          {% set ksek_rows = [
-            ('Net. Omsättning', 'omsattning', 'nettoomsattning'),
-            ('Årets Resultat', 'arets_resultat', none),
-            ('EBITDA', 'ebitda', none),
-            ('Rörelseresultat efter avskrivningar', 'rorelseresultat_efter_avskrivningar', none),
-            ('Result Before Tax', 'resultat_fore_skatt', none),
-            ('Owner Salary', 'loner_styrelse_vd', none),
-            ('Other Salaries', 'loner_ovriga', none),
-            ('Proposed Dividend', 'foreslagen_utdelning', none),
-            ('Summa Tillgångar', 'summa_tillgangar', none),
-            ('Eget Kapital', 'eget_kapital', none),
-            ('Cash', 'kassa_och_bank', none),
-            ('Långfristiga Skulder', 'langfristiga_skulder', none),
-            ('Kortfristiga Skulder', 'kortfristiga_skulder', none),
-          ] %}
-          {% for label, key, alt_key in ksek_rows %}
-          <tr>
-            <td style="font-weight:500;color:#374151">{{ label }}</td>
-            {% for year in historical %}
-            {% set val = year.get(key) if year.get(key) is not none else (year.get(alt_key) if alt_key else none) %}
-            <td style="text-align:right;{% if val is not none and val < 0 %}color:#dc2626{% endif %}">
-              {% if val is not none %}{{ (val / 100000)|round(0)|int }} KSEK{% else %}—{% endif %}
-            </td>
-            {% endfor %}
-          </tr>
-          {% endfor %}
-
-          <tr style="border-top:2px solid #e5e7eb"><td colspan="{{ historical|length + 1 }}" style="padding:4px"></td></tr>
-
-          {% set pct_rows = [
-            ('Vinstmarginal', 'vinstmarginal'),
-            ('Soliditet', 'soliditet'),
-            ('Kassalikviditet', 'kassalikviditet'),
-            ('Return on Equity', 'avkastning_eget_kapital'),
-            ('Return on Total Capital', 'avkastning_totalt_kapital'),
-          ] %}
-          {% for label, key in pct_rows %}
-          <tr>
-            <td style="font-weight:500;color:#374151">{{ label }}</td>
-            {% for year in historical %}
-            {% set val = year.get(key) %}
-            <td style="text-align:right;{% if val is not none and val < 0 %}color:#dc2626{% endif %}">
-              {% if val is not none %}{{ val|round(1) }}%{% else %}—{% endif %}
-            </td>
-            {% endfor %}
-          </tr>
-          {% endfor %}
-
-          <tr style="border-top:2px solid #e5e7eb"><td colspan="{{ historical|length + 1 }}" style="padding:4px"></td></tr>
-
-          <tr>
-            <td style="font-weight:500;color:#374151">Anställda</td>
-            {% for year in historical %}
-            <td style="text-align:right">{{ year.get('anstallda') if year.get('anstallda') is not none else '—' }}</td>
-            {% endfor %}
-          </tr>
-          <tr>
-            <td style="font-weight:500;color:#374151">Debt Ratio</td>
-            {% for year in historical %}
-            {% set val = year.get('skuldsattningsgrad') %}
-            <td style="text-align:right">{% if val is not none %}{{ val|round(2) }}{% else %}—{% endif %}</td>
-            {% endfor %}
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <canvas id="historicalChart" height="80"></canvas>
   </div>
 </div>
+
+<!-- Löner & Utdelning -->
+<div class="card mb-3">
+  <div class="card-header"><span class="card-title">Löner & Utdelning</span></div>
+  <div class="card-body" style="overflow-x:auto">
+    <table class="data-table" style="width:100%;font-size:12px">
+      <thead>
+        <tr>
+          <th style="text-align:left;min-width:220px">Post</th>
+          {% for year in historical %}
+          <th style="text-align:right;min-width:100px">{{ year.get('slutdatum', year.get('period', 'Year ' ~ loop.index)) }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% set salary_rows = [
+          ('Löner styrelse och VD', 'loner_styrelse_vd'),
+          ('Löner övriga', 'loner_ovriga'),
+          ('Föreslagen utdelning', 'foreslagen_utdelning'),
+        ] %}
+        {% for label, key in salary_rows %}
+        <tr>
+          <td style="font-weight:500;color:#374151">{{ label }}</td>
+          {% for year in historical %}
+          {% set val = year.get(key) %}
+          <td style="text-align:right;{% if val is not none and val < 0 %}color:#dc2626{% endif %}">
+            {% if val is not none %}{{ (val / 100000)|round(0)|int }} KSEK{% else %}—{% endif %}
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Resultaträkning -->
+<div class="card mb-3">
+  <div class="card-header"><span class="card-title">Resultaträkning</span></div>
+  <div class="card-body" style="overflow-x:auto">
+    <table class="data-table" style="width:100%;font-size:12px">
+      <thead>
+        <tr>
+          <th style="text-align:left;min-width:220px">Post</th>
+          {% for year in historical %}
+          <th style="text-align:right;min-width:100px">{{ year.get('slutdatum', year.get('period', 'Year ' ~ loop.index)) }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% set rr_rows = [
+          ('Nettoomsättning', 'nettoomsattning'),
+          ('Övrig omsättning', 'ovrig_omsattning'),
+          ('Omsättning', 'omsattning'),
+          ('Lagerförändring', 'lagerforandring'),
+          ('Rörelsekostnader', 'rorelsekostnader'),
+          ('Finansiella intäkter', 'finansiella_intakter'),
+          ('Finansiella kostnader', 'finansiella_kostnader'),
+          ('Resultat efter finansnetto', 'resultat_efter_finansnetto'),
+          ('Skatt på årets resultat', 'skatt'),
+          ('Årets resultat', 'arets_resultat'),
+        ] %}
+        {% for label, key in rr_rows %}
+        <tr{% if key == 'arets_resultat' %} style="border-top:2px solid #d1d5db;font-weight:600"{% endif %}>
+          <td style="font-weight:500;color:#374151">{{ label }}</td>
+          {% for year in historical %}
+          {% set val = year.get(key) %}
+          <td style="text-align:right;{% if val is not none and val < 0 %}color:#dc2626{% endif %}">
+            {% if val is not none %}{{ (val / 100000)|round(0)|int }} KSEK{% else %}—{% endif %}
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Balansräkning -->
+<div class="card mb-3">
+  <div class="card-header"><span class="card-title">Balansräkning</span></div>
+  <div class="card-body" style="overflow-x:auto">
+    <table class="data-table" style="width:100%;font-size:12px">
+      <thead>
+        <tr>
+          <th style="text-align:left;min-width:220px">Post</th>
+          {% for year in historical %}
+          <th style="text-align:right;min-width:100px">{{ year.get('slutdatum', year.get('period', 'Year ' ~ loop.index)) }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% set br_rows = [
+          ('Immateriella anläggningstillgångar', 'immateriella_anlaggningstillgangar'),
+          ('Materiella anläggningstillgångar', 'materiella_anlaggningstillgangar'),
+          ('Finansiella anläggningstillgångar', 'finansiella_anlaggningstillgangar'),
+          ('Anläggningstillgångar', 'anlaggningstillgangar'),
+          ('Varulager', 'varulager'),
+          ('Kundfordringar', 'kundfordringar'),
+          ('Kassa och bank', 'kassa_och_bank'),
+          ('Omsättningstillgångar', 'omsattningstillgangar'),
+          ('Summa tillgångar', 'summa_tillgangar'),
+        ] %}
+        {% for label, key in br_rows %}
+        <tr{% if key in ('anlaggningstillgangar', 'omsattningstillgangar', 'summa_tillgangar') %} style="border-top:1px solid #d1d5db;font-weight:600"{% endif %}>
+          <td style="font-weight:500;color:#374151">{{ label }}</td>
+          {% for year in historical %}
+          {% set val = year.get(key) %}
+          <td style="text-align:right;{% if val is not none and val < 0 %}color:#dc2626{% endif %}">
+            {% if val is not none %}{{ (val / 100000)|round(0)|int }} KSEK{% else %}—{% endif %}
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+
+        <tr style="border-top:2px solid #9ca3af"><td colspan="{{ historical|length + 1 }}" style="padding:4px"></td></tr>
+
+        {% set br_equity_rows = [
+          ('Fritt eget kapital', 'fritt_eget_kapital'),
+          ('Obeskattade reserver', 'obeskattade_reserver'),
+          ('Eget kapital', 'eget_kapital'),
+          ('Avsättningar', 'avsattningar'),
+          ('Långfristiga skulder', 'langfristiga_skulder'),
+          ('Leverantörsskulder', 'leverantorsskulder'),
+          ('Kortfristiga skulder', 'kortfristiga_skulder'),
+          ('Summa eget kapital och skulder', 'summa_eget_kapital_och_skulder'),
+        ] %}
+        {% for label, key in br_equity_rows %}
+        <tr{% if key in ('eget_kapital', 'summa_eget_kapital_och_skulder') %} style="border-top:1px solid #d1d5db;font-weight:600"{% endif %}>
+          <td style="font-weight:500;color:#374151">{{ label }}</td>
+          {% for year in historical %}
+          {% set val = year.get(key) %}
+          <td style="text-align:right;{% if val is not none and val < 0 %}color:#dc2626{% endif %}">
+            {% if val is not none %}{{ (val / 100000)|round(0)|int }} KSEK{% else %}—{% endif %}
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Nyckeltal -->
+<div class="card mb-3">
+  <div class="card-header"><span class="card-title">Nyckeltal</span></div>
+  <div class="card-body" style="overflow-x:auto">
+    <table class="data-table" style="width:100%;font-size:12px">
+      <thead>
+        <tr>
+          <th style="text-align:left;min-width:220px">Nyckeltal</th>
+          {% for year in historical %}
+          <th style="text-align:right;min-width:100px">{{ year.get('slutdatum', year.get('period', 'Year ' ~ loop.index)) }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% set pct_rows = [
+          ('Vinstmarginal', 'vinstmarginal_pct'),
+          ('Kassalikviditet', 'kassalikviditet_pct'),
+          ('Soliditet', 'soliditet_pct'),
+          ('Avkastning eget kapital', 'avkastning_eget_kapital_pct'),
+          ('Avkastning totalt kapital', 'avkastning_totalt_kapital_pct'),
+        ] %}
+        {% for label, key in pct_rows %}
+        <tr>
+          <td style="font-weight:500;color:#374151">{{ label }}</td>
+          {% for year in historical %}
+          {% set val = year.get(key) %}
+          <td style="text-align:right;{% if val is not none and val < 0 %}color:#dc2626{% endif %}">
+            {% if val is not none %}{{ val|round(1) }}%{% else %}—{% endif %}
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+
+        <tr style="border-top:1px solid #e5e7eb">
+          <td style="font-weight:500;color:#374151">Skuldsättningsgrad</td>
+          {% for year in historical %}
+          {% set val = year.get('skuldsattningsgrad') %}
+          <td style="text-align:right">{% if val is not none %}{{ val|round(2) }}{% else %}—{% endif %}</td>
+          {% endfor %}
+        </tr>
+        <tr>
+          <td style="font-weight:500;color:#374151">Anställda</td>
+          {% for year in historical %}
+          <td style="text-align:right">{{ year.get('anstallda') if year.get('anstallda') is not none else '—' }}</td>
+          {% endfor %}
+        </tr>
+        <tr>
+          <td style="font-weight:500;color:#374151">Personalkostnader per anställd</td>
+          {% for year in historical %}
+          {% set val = year.get('personalkostnader_per_anstalld') %}
+          <td style="text-align:right">{% if val is not none %}{{ (val / 100000)|round(0)|int }} KSEK{% else %}—{% endif %}</td>
+          {% endfor %}
+        </tr>
+        <tr>
+          <td style="font-weight:500;color:#374151">EBITDA</td>
+          {% for year in historical %}
+          {% set val = year.get('ebitda') %}
+          <td style="text-align:right;{% if val is not none and val < 0 %}color:#dc2626{% endif %}">
+            {% if val is not none %}{{ (val / 100000)|round(0)|int }} KSEK{% else %}—{% endif %}
+          </td>
+          {% endfor %}
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
 {% elif company.phase2_status == 'not_started' %}
 <div class="card mb-3">
   <div class="card-body text-muted" style="text-align:center;padding:32px">
@@ -278,7 +408,7 @@ async function updateStatus(orgnr, newStatus) {
   script.src = 'https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js';
   script.onload = function() {
     const historical = {{ historical | tojson }};
-    const labels = historical.map((y, i) => y.period || ('Year ' + (i + 1)));
+    const labels = historical.map((y, i) => y.slutdatum || y.period || ('Year ' + (i + 1)));
 
     // Revenue in MSEK (öre → MSEK = / 100_000_000)
     const revenue = historical.map(y => {

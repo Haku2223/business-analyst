@@ -240,21 +240,24 @@ def _extract_year_from_nextdata(entry: dict) -> dict[str, Any] | None:
 
 
 def parse_bokslut_html_tables(html: str) -> list[dict[str, Any]]:
-    """Fallback: parse financial data from HTML tables on the bokslut page.
+    """Parse financial data from HTML tables on the bokslut page.
 
-    This handles the case where __NEXT_DATA__ is not available or doesn't
-    contain the financial data.
+    Reads the values exactly as displayed on Allabolag (including correct
+    signs for expense items). Values are converted from KSEK to öre (×100000)
+    so they are consistent with the __NEXT_DATA__ parser and template formula.
     """
     soup = BeautifulSoup(html, "lxml")
     years_data: list[dict[str, Any]] = []
+    year_labels_captured: list[str] = []
 
     # Find all tables on the page
     tables = soup.find_all("table")
     if not tables:
         return []
 
-    # Section label → field name mapping
-    field_map = {
+    # Section label → field name mapping (exact match only — no partial matching)
+    # Keys must be lowercase and match the exact text shown on Allabolag's page.
+    field_map: dict[str, str] = {
         # Bokslutsperiod
         "startdatum": "startdatum",
         "slutdatum": "slutdatum",
@@ -276,7 +279,9 @@ def parse_bokslut_html_tables(html: str) -> list[dict[str, Any]]:
         "resultat före skatt": "resultat_fore_skatt",
         "skatt på årets resultat": "skatt",
         "årets resultat": "arets_resultat",
-        # Balansräkning
+        # Balansräkning — assets
+        # NOTE: exact-match ordering matters here to prevent substring confusion.
+        # "immateriella anläggningstillgångar" must NOT match "materiella ..."
         "immateriella anläggningstillgångar": "immateriella_anlaggningstillgangar",
         "materiella anläggningstillgångar": "materiella_anlaggningstillgangar",
         "finansiella anläggningstillgångar": "finansiella_anlaggningstillgangar",
@@ -284,8 +289,10 @@ def parse_bokslut_html_tables(html: str) -> list[dict[str, Any]]:
         "varulager": "varulager",
         "kundfordringar": "kundfordringar",
         "kassa och bank": "kassa_och_bank",
+        # "omsättningstillgångar" must NOT match "omsättning"
         "omsättningstillgångar": "omsattningstillgangar",
         "summa tillgångar": "summa_tillgangar",
+        # Balansräkning — equity & liabilities
         "fritt eget kapital": "fritt_eget_kapital",
         "obeskattade reserver": "obeskattade_reserver",
         "eget kapital": "eget_kapital",
@@ -309,6 +316,24 @@ def parse_bokslut_html_tables(html: str) -> list[dict[str, Any]]:
         "ebitda": "ebitda",
     }
 
+    # Monetary fields are displayed in KSEK on Allabolag.
+    # We multiply by 100_000 to store in öre (consistent with __NEXT_DATA__
+    # parser and the template's division-by-100_000 display formula).
+    monetary_fields = {
+        "loner_styrelse_vd", "loner_ovriga", "foreslagen_utdelning",
+        "nettoomsattning", "ovrig_omsattning", "omsattning", "lagerforandring",
+        "rorelsekostnader", "rorelseresultat", "finansiella_intakter",
+        "finansiella_kostnader", "resultat_efter_finansnetto", "resultat_fore_skatt",
+        "skatt", "arets_resultat",
+        "immateriella_anlaggningstillgangar", "materiella_anlaggningstillgangar",
+        "finansiella_anlaggningstillgangar", "anlaggningstillgangar",
+        "varulager", "kundfordringar", "kassa_och_bank", "omsattningstillgangar",
+        "summa_tillgangar", "fritt_eget_kapital", "obeskattade_reserver", "eget_kapital",
+        "avsattningar", "langfristiga_skulder", "leverantorsskulder",
+        "kortfristiga_skulder", "summa_eget_kapital_och_skulder",
+        "personalkostnader_per_anstalld", "ebitda",
+    }
+
     for table in tables:
         rows = table.find_all("tr")
         if len(rows) < 2:
@@ -330,30 +355,30 @@ def parse_bokslut_html_tables(html: str) -> list[dict[str, Any]]:
         if not year_labels:
             continue
 
+        # Capture year date labels from the first relevant table
+        if not year_labels_captured:
+            year_labels_captured = year_labels
+
         # Ensure we have year_data dicts for each column
         while len(years_data) < len(year_labels):
             years_data.append({})
 
-        # Parse data rows
+        # Parse data rows — EXACT MATCH ONLY, no partial matching.
+        # Partial matching caused dangerous field collisions, e.g.:
+        #   "omsättning" matching "omsättningstillgångar"
+        #   "materiella" matching "immateriella anläggningstillgångar"
         for row in rows[1:]:
             cells = row.find_all(["th", "td"])
             if len(cells) < 2:
                 continue
 
             label_text = cells[0].get_text(strip=True).lower().strip()
-            # Strip trailing (ksek), (%) etc.
+            # Strip trailing "(ksek)", "(%)" etc.
             label_text = re.sub(r"\s*\(.*?\)\s*$", "", label_text).strip()
 
             field_name = field_map.get(label_text)
             if not field_name:
-                # Try partial match
-                for key, fname in field_map.items():
-                    if key in label_text or label_text in key:
-                        field_name = fname
-                        break
-
-            if not field_name:
-                continue
+                continue  # Unknown label — skip rather than guess
 
             # Extract values for each year column
             for i, cell in enumerate(cells[1:]):
@@ -362,26 +387,48 @@ def parse_bokslut_html_tables(html: str) -> list[dict[str, Any]]:
                 text = cell.get_text(strip=True)
                 if field_name in ("startdatum", "slutdatum", "valutakod"):
                     years_data[i][field_name] = text if text else None
+                elif field_name in ("anstallda",
+                                    "vinstmarginal_pct", "kassalikviditet_pct",
+                                    "soliditet_pct", "skuldsattningsgrad",
+                                    "avkastning_eget_kapital_pct",
+                                    "avkastning_totalt_kapital_pct"):
+                    # Percentages, ratios, and counts — store as-is
+                    years_data[i][field_name] = _parse_swedish_number(text)
+                elif field_name in monetary_fields:
+                    # KSEK → öre: multiply by 100_000
+                    raw = _parse_swedish_number(text)
+                    years_data[i][field_name] = (
+                        int(raw * 100_000) if raw is not None else None
+                    )
                 else:
                     years_data[i][field_name] = _parse_swedish_number(text)
 
-    # Filter out empty dicts
+    # Attach year labels as "period" so the template can show column headers
+    for i, label in enumerate(year_labels_captured):
+        if i < len(years_data) and "slutdatum" not in years_data[i]:
+            years_data[i]["period"] = label
+
+    # Filter out completely empty dicts
     return [y for y in years_data if y]
 
 
 def parse_bokslut(html: str) -> list[dict[str, Any]]:
     """Parse financial data from a bokslut page using the best available method.
 
-    Tries __NEXT_DATA__ JSON first, then falls back to HTML table parsing.
+    Tries HTML table parsing first (values match the displayed page, including
+    correct signs for expense items). Falls back to __NEXT_DATA__ JSON if no
+    HTML tables are found (e.g. client-side rendered pages).
+
     Returns a list of dicts (one per fiscal year, up to 5), newest first.
     """
-    # Try JSON extraction first
-    years = parse_bokslut_nextdata(html)
+    # HTML tables are preferred: they show exactly what Allabolag displays,
+    # with correct signs for negative items (costs, losses).
+    years = parse_bokslut_html_tables(html)
     if years:
         return years[:5]
 
-    # Fallback to HTML table parsing
-    years = parse_bokslut_html_tables(html)
+    # Fallback to __NEXT_DATA__ JSON (stores values in öre, signs may differ)
+    years = parse_bokslut_nextdata(html)
     return years[:5]
 
 
@@ -559,22 +606,55 @@ async def fetch_bokslut_page(
 
 
 # ---------------------------------------------------------------------------
-# Construct bokslut URL
+# Construct / resolve bokslut URL
 # ---------------------------------------------------------------------------
 
-def bokslut_url(allabolag_url: str | None, orgnr: str) -> str:
-    """Build the /bokslut URL for a company.
+async def resolve_bokslut_url(client: httpx.AsyncClient, allabolag_url: str | None, orgnr: str) -> str:
+    """Resolve the correct /bokslut URL for a company.
 
-    Uses the stored allabolag_url if available, otherwise constructs from orgnr.
+    The stored allabolag_url uses the org number as the last path segment
+    (e.g. /foretag/slug/city/category/5566503461), but Allabolag's bokslut
+    page uses a different internal ID (e.g. /bokslut/slug/city/category/2JZ0G8XI5YDDT).
+    Simply appending /bokslut or replacing the path gives 404s.
+
+    Strategy:
+    1. If URL already points to /bokslut/, use it directly.
+    2. Send a HEAD request (follows redirects) to the /foretag/ URL to discover
+       the canonical URL with the correct internal ID, then replace /foretag/
+       with /bokslut/ in the final redirected URL.
+    3. Fall back to the simple /{orgnr}/bokslut format if all else fails.
     """
     if allabolag_url:
-        base = allabolag_url.rstrip("/")
-        # If it already ends with /bokslut, use as-is
-        if base.endswith("/bokslut"):
-            return base
-        return f"{base}/bokslut"
+        url = allabolag_url.rstrip("/")
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        if parsed.path.startswith("/bokslut/"):
+            return url
 
-    # Fallback: construct from org number
+        try:
+            resp = await client.head(
+                url,
+                headers={
+                    "User-Agent": USER_AGENT,
+                    "Accept": "text/html,application/xhtml+xml,*/*;q=0.8",
+                },
+                follow_redirects=True,
+                timeout=REQUEST_TIMEOUT,
+            )
+            # The final URL after redirects contains the correct internal ID
+            final_url = str(resp.url).rstrip("/")
+            if "/foretag/" in final_url:
+                return final_url.replace("/foretag/", "/bokslut/", 1)
+            if "/bokslut/" in final_url:
+                return final_url
+        except Exception as e:
+            logger.warning("HEAD request failed for %s: %s — using fallback", url, e)
+
+        # Fallback: naive /foretag/ → /bokslut/ replacement on original URL
+        if "/foretag/" in url:
+            return url.replace("/foretag/", "/bokslut/", 1)
+
+    # Last resort: construct from org number
     orgnr_clean = orgnr.replace("-", "")
     return f"https://www.allabolag.se/{orgnr_clean}/bokslut"
 
@@ -654,7 +734,7 @@ async def run_phase2a_job(
                             companies_done += 1
                             continue
 
-                        url = bokslut_url(company.allabolag_url, orgnr)
+                        url = await resolve_bokslut_url(client, company.allabolag_url, orgnr)
                         _log_job(job_id, f"  Fetching {url}")
 
                         html = await fetch_bokslut_page(client, url)
