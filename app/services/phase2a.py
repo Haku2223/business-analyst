@@ -606,22 +606,55 @@ async def fetch_bokslut_page(
 
 
 # ---------------------------------------------------------------------------
-# Construct bokslut URL
+# Construct / resolve bokslut URL
 # ---------------------------------------------------------------------------
 
-def bokslut_url(allabolag_url: str | None, orgnr: str) -> str:
-    """Build the /bokslut URL for a company.
+async def resolve_bokslut_url(client: httpx.AsyncClient, allabolag_url: str | None, orgnr: str) -> str:
+    """Resolve the correct /bokslut URL for a company.
 
-    Uses the stored allabolag_url if available, otherwise constructs from orgnr.
+    The stored allabolag_url uses the org number as the last path segment
+    (e.g. /foretag/slug/city/category/5566503461), but Allabolag's bokslut
+    page uses a different internal ID (e.g. /bokslut/slug/city/category/2JZ0G8XI5YDDT).
+    Simply appending /bokslut or replacing the path gives 404s.
+
+    Strategy:
+    1. If URL already points to /bokslut/, use it directly.
+    2. Send a HEAD request (follows redirects) to the /foretag/ URL to discover
+       the canonical URL with the correct internal ID, then replace /foretag/
+       with /bokslut/ in the final redirected URL.
+    3. Fall back to the simple /{orgnr}/bokslut format if all else fails.
     """
     if allabolag_url:
-        base = allabolag_url.rstrip("/")
-        # If it already ends with /bokslut, use as-is
-        if base.endswith("/bokslut"):
-            return base
-        return f"{base}/bokslut"
+        url = allabolag_url.rstrip("/")
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        if parsed.path.startswith("/bokslut/"):
+            return url
 
-    # Fallback: construct from org number
+        try:
+            resp = await client.head(
+                url,
+                headers={
+                    "User-Agent": USER_AGENT,
+                    "Accept": "text/html,application/xhtml+xml,*/*;q=0.8",
+                },
+                follow_redirects=True,
+                timeout=REQUEST_TIMEOUT,
+            )
+            # The final URL after redirects contains the correct internal ID
+            final_url = str(resp.url).rstrip("/")
+            if "/foretag/" in final_url:
+                return final_url.replace("/foretag/", "/bokslut/", 1)
+            if "/bokslut/" in final_url:
+                return final_url
+        except Exception as e:
+            logger.warning("HEAD request failed for %s: %s — using fallback", url, e)
+
+        # Fallback: naive /foretag/ → /bokslut/ replacement on original URL
+        if "/foretag/" in url:
+            return url.replace("/foretag/", "/bokslut/", 1)
+
+    # Last resort: construct from org number
     orgnr_clean = orgnr.replace("-", "")
     return f"https://www.allabolag.se/{orgnr_clean}/bokslut"
 
@@ -701,7 +734,7 @@ async def run_phase2a_job(
                             companies_done += 1
                             continue
 
-                        url = bokslut_url(company.allabolag_url, orgnr)
+                        url = await resolve_bokslut_url(client, company.allabolag_url, orgnr)
                         _log_job(job_id, f"  Fetching {url}")
 
                         html = await fetch_bokslut_page(client, url)
