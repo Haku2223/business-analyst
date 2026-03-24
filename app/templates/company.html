@@ -70,15 +70,15 @@
     <div class="card-body">
       <table style="width:100%;font-size:13px">
         {% set items = [
-          ('Revenue', (company.omsattning / 100000000)|round(1)|string + ' MSEK' if company.omsattning else '—'),
-          ('Net Result', (company.arets_resultat / 100000)|round(0)|int|string + ' KSEK' if company.arets_resultat else '—'),
-          ('Profit Margin', company.vinstmarginal|string + '%' if company.vinstmarginal else '—'),
+          ('Net. Omsättning', (company.omsattning / 100000000)|round(1)|string + ' MSEK' if company.omsattning else '—'),
+          ('Årets Resultat', (company.arets_resultat / 100000)|round(0)|int|string + ' KSEK' if company.arets_resultat else '—'),
+          ('Vinstmarginal', company.vinstmarginal|string + '%' if company.vinstmarginal else '—'),
           ('Soliditet', company.soliditet|string + '%' if company.soliditet else '—'),
-          ('Employees', company.antal_anstallda|string if company.antal_anstallda else '—'),
+          ('Anställda', company.antal_anstallda|string if company.antal_anstallda else '—'),
           ('Cash', (company.kassa_och_bank / 100000)|round(0)|int|string + ' KSEK' if company.kassa_och_bank else '—'),
           ('Owner Salary', (company.loner_styrelse_vd / 100000)|round(0)|int|string + ' KSEK' if company.loner_styrelse_vd else '—'),
-          ('Total Assets', (company.summa_tillgangar / 100000000)|round(1)|string + ' MSEK' if company.summa_tillgangar else '—'),
-          ('Equity', (company.eget_kapital / 100000000)|round(1)|string + ' MSEK' if company.eget_kapital else '—'),
+          ('Summa Tillgångar', (company.summa_tillgangar / 100000000)|round(1)|string + ' MSEK' if company.summa_tillgangar else '—'),
+          ('Eget Kapital', (company.eget_kapital / 100000000)|round(1)|string + ' MSEK' if company.eget_kapital else '—'),
           ('Fiscal Year End', company.bokslutsperiod_slut or '—'),
         ] %}
         {% for label, value in items %}
@@ -136,19 +136,19 @@
         </thead>
         <tbody>
           {% set ksek_rows = [
-            ('Revenue', 'omsattning', 'nettoomsattning'),
-            ('Net Result', 'arets_resultat', none),
+            ('Net. Omsättning', 'omsattning', 'nettoomsattning'),
+            ('Årets Resultat', 'arets_resultat', none),
             ('EBITDA', 'ebitda', none),
-            ('Operating Result', 'rorelseresultat_efter_avskrivningar', none),
+            ('Rörelseresultat efter avskrivningar', 'rorelseresultat_efter_avskrivningar', none),
             ('Result Before Tax', 'resultat_fore_skatt', none),
             ('Owner Salary', 'loner_styrelse_vd', none),
             ('Other Salaries', 'loner_ovriga', none),
             ('Proposed Dividend', 'foreslagen_utdelning', none),
-            ('Total Assets', 'summa_tillgangar', none),
-            ('Equity', 'eget_kapital', none),
+            ('Summa Tillgångar', 'summa_tillgangar', none),
+            ('Eget Kapital', 'eget_kapital', none),
             ('Cash', 'kassa_och_bank', none),
-            ('Long-term Debt', 'langfristiga_skulder', none),
-            ('Short-term Debt', 'kortfristiga_skulder', none),
+            ('Långfristiga Skulder', 'langfristiga_skulder', none),
+            ('Kortfristiga Skulder', 'kortfristiga_skulder', none),
           ] %}
           {% for label, key, alt_key in ksek_rows %}
           <tr>
@@ -165,7 +165,7 @@
           <tr style="border-top:2px solid #e5e7eb"><td colspan="{{ historical|length + 1 }}" style="padding:4px"></td></tr>
 
           {% set pct_rows = [
-            ('Profit Margin', 'vinstmarginal'),
+            ('Vinstmarginal', 'vinstmarginal'),
             ('Soliditet', 'soliditet'),
             ('Kassalikviditet', 'kassalikviditet'),
             ('Return on Equity', 'avkastning_eget_kapital'),
@@ -186,7 +186,7 @@
           <tr style="border-top:2px solid #e5e7eb"><td colspan="{{ historical|length + 1 }}" style="padding:4px"></td></tr>
 
           <tr>
-            <td style="font-weight:500;color:#374151">Employees</td>
+            <td style="font-weight:500;color:#374151">Anställda</td>
             {% for year in historical %}
             <td style="text-align:right">{{ year.get('anstallda') if year.get('anstallda') is not none else '—' }}</td>
             {% endfor %}
