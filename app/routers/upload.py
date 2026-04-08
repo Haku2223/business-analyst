@@ -13,6 +13,7 @@ from app.database import get_db
 from app.models import Batch, BatchCompany, Company
 from app.services.parser import get_sheet_names, parse_file, df_row_to_company_dict
 from app.services.phase1 import DEFAULT_FILTER_CONFIG, run_phase1
+from app.routers.filter import get_active_config
 
 logger = logging.getLogger(__name__)
 
@@ -124,8 +125,8 @@ async def upload_post(
 
     # Load filter config (use defaults for now; user can edit on /filter)
     async for db in get_db():
-        # Get most recent filter preset saved as "active" or use defaults
-        filter_config = DEFAULT_FILTER_CONFIG.copy()
+        # Use the active filter config (set via /filter page), falling back to defaults
+        filter_config = get_active_config()
 
         # Run Phase 1 filtering
         phase1_result = run_phase1(df, filter_config)
