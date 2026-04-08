@@ -130,6 +130,7 @@ async def results_page(
                 "sni_codes": company.sni_codes,
                 "sni_names": company.sni_names,
                 "sni_display": _sni_display(company.sni_codes, company.sni_names),
+                "bolagstyp": company.bolagstyp,
                 "age_years": _calc_age(company.registreringsdatum),
                 "omsattning_sek": _öre_to_sek(company.omsattning),
                 "antal_anstallda": company.antal_anstallda,

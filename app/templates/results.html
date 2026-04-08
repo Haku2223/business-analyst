@@ -109,6 +109,10 @@
         <div class="fp-row">
           <label><input type="checkbox" id="fp-hard_profitability_enabled" {% if cfg.hard_profitability_enabled %}checked{% endif %} /> Profitability (Result &gt; 0)</label>
         </div>
+
+        <div class="fp-row">
+          <label><input type="checkbox" id="fp-hard_exclude_publikt_aktiebolag_enabled" {% if cfg.hard_exclude_publikt_aktiebolag_enabled %}checked{% endif %} /> Exclude Publikt Aktiebolag (listed companies)</label>
+        </div>
       </div>
 
       <!-- Soft filters column -->
@@ -174,6 +178,7 @@
         <tr>
           <th class="sort-header" data-col="name">Företag</th>
           <th class="sort-header" data-col="orgnr">Org.Nr</th>
+          <th class="sort-header" data-col="bolagstyp">Bolagstyp</th>
           <th class="sort-header" data-col="city">Kommun / Län</th>
           <th class="sort-header" data-col="sni">Industry (SNI)</th>
           <th class="sort-header" data-col="age">Ålder</th>
@@ -207,6 +212,7 @@
             {% endif %}
           </td>
           <td style="font-family:monospace;font-size:12px">{{ row.orgnr }}</td>
+          <td style="font-size:12px;white-space:nowrap">{{ row.bolagstyp or '—' }}</td>
           <td>
             {{ row.ort or '—' }}
             {% if row.lan %}<br><small class="text-muted">{{ row.lan }}</small>{% endif %}
@@ -359,7 +365,8 @@ const HARD_LABELS = {
   'revenue':       { label: 'Revenue out of range',     desc: 'Revenue is outside the 3–30 MSEK range' },
   'employees':     { label: 'Headcount out of range',   desc: 'Employees are outside the 3–30 range' },
   'sni_code':      { label: 'SNI code not matched',     desc: 'No SNI code matches the configured target list' },
-  'profitability': { label: 'Unprofitable',             desc: 'Net result (årets resultat) is zero or negative' },
+  'profitability':          { label: 'Unprofitable',             desc: 'Net result (årets resultat) is zero or negative' },
+  'publikt_aktiebolag':     { label: 'Publikt Aktiebolag',       desc: 'Company is publicly listed (Publikt aktiebolag)' },
 };
 const SOFT_LABELS = {
   'soft:profit_margin': { label: 'Low profit margin',      desc: 'Profit margin is below the 10% threshold' },
@@ -441,6 +448,7 @@ function populateFilterPanel(cfg) {
   const boolFields = [
     'hard_company_type_enabled', 'hard_age_enabled', 'hard_revenue_enabled',
     'hard_employees_enabled', 'hard_sni_enabled', 'hard_profitability_enabled',
+    'hard_exclude_publikt_aktiebolag_enabled',
     'soft_margin_enabled', 'soft_soliditet_enabled', 'soft_recency_enabled',
     'soft_county_enabled'
   ];
@@ -512,6 +520,7 @@ function collectFilterConfig() {
     hard_sni_enabled: document.getElementById('fp-hard_sni_enabled').checked,
     sni_codes: sniCodes,
     hard_profitability_enabled: document.getElementById('fp-hard_profitability_enabled').checked,
+    hard_exclude_publikt_aktiebolag_enabled: document.getElementById('fp-hard_exclude_publikt_aktiebolag_enabled').checked,
     soft_margin_enabled: document.getElementById('fp-soft_margin_enabled').checked,
     soft_margin_min_pct: parseFloat(document.getElementById('fp-soft_margin_min_pct').value) || 10.0,
     soft_soliditet_enabled: document.getElementById('fp-soft_soliditet_enabled').checked,

@@ -36,6 +36,8 @@ DEFAULT_FILTER_CONFIG: dict[str, Any] = {
 
     "hard_profitability_enabled": True,
 
+    "hard_exclude_publikt_aktiebolag_enabled": True,
+
     # Soft filters (enabled by default)
     "soft_margin_enabled": True,
     "soft_margin_min_pct": 10.0,
@@ -146,7 +148,14 @@ def run_phase1(df: pd.DataFrame, config: dict[str, Any]) -> dict[str, Any]:
             df = _apply_hard(df, mask, "sni_code")
 
     # ------------------------------------------------------------------ #
-    # HARD FILTER 6: Profitability (ÅRETS RESULTAT > 0)                   #
+    # HARD FILTER 6: Exclude Publikt Aktiebolag (publicly listed)         #
+    # ------------------------------------------------------------------ #
+    if config.get("hard_exclude_publikt_aktiebolag_enabled", True) and "bolagstyp" in df.columns:
+        mask = df["bolagstyp"].astype(str).str.contains("Publikt aktiebolag", case=False, na=False)
+        df = _apply_hard(df, mask, "publikt_aktiebolag")
+
+    # ------------------------------------------------------------------ #
+    # HARD FILTER 7: Profitability (ÅRETS RESULTAT > 0)                   #
     # ------------------------------------------------------------------ #
     if config.get("hard_profitability_enabled", True) and "arets_resultat" in df.columns:
         result = pd.to_numeric(df["arets_resultat"], errors="coerce")

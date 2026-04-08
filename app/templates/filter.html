@@ -145,6 +145,18 @@ input[type=number]:focus, input[type=text]:focus { outline: none; border-color: 
         </div>
       </div>
 
+      <!-- Exclude Publikt Aktiebolag -->
+      <div class="filter-row">
+        <input type="checkbox" name="hard_exclude_publikt_aktiebolag_enabled" {% if cfg.hard_exclude_publikt_aktiebolag_enabled %}checked{% endif %} />
+        <div>
+          <div class="filter-name">Exclude Publikt Aktiebolag</div>
+          <div class="filter-desc">BOLAGSTYP must not contain "Publikt aktiebolag" (publicly listed companies are excluded)</div>
+        </div>
+        <div class="filter-inputs">
+          <span class="range-sep">Exclude listed companies</span>
+        </div>
+      </div>
+
     </div>
   </div>
 
