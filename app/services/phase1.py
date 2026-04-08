@@ -51,6 +51,21 @@ DEFAULT_FILTER_CONFIG: dict[str, Any] = {
     "soft_county_enabled": False,
     "soft_county_values": [],  # list of county names
 
+    # Per-filter type overrides: "hard" = exclude on fail, "soft" = −1 score on fail
+    "filter_types": {
+        "company_type": "hard",
+        "company_age": "hard",
+        "revenue": "hard",
+        "employees": "hard",
+        "sni_code": "hard",
+        "profitability": "hard",
+        "exclude_publikt_aktiebolag": "hard",
+        "profit_margin": "soft",
+        "soliditet": "soft",
+        "data_recency": "soft",
+        "county": "soft",
+    },
+
     # Display helpers
     "revenue_min_msek": 3,
     "revenue_max_msek": 30,
@@ -88,46 +103,49 @@ def run_phase1(df: pd.DataFrame, config: dict[str, Any]) -> dict[str, Any]:
     df["_failed_filters"] = [[] for _ in range(n)]
     df["_soft_score"] = 0  # penalty (negative)
 
+    # Per-filter type config: "hard" excludes, "soft" scores
+    filter_types: dict[str, str] = config.get("filter_types", {})
+
     # ------------------------------------------------------------------ #
     # HARD FILTER 1: Company type (BOLAGSTYP must contain "Aktiebolag")   #
     # ------------------------------------------------------------------ #
     if config.get("hard_company_type_enabled", True) and "bolagstyp" in df.columns:
         val = str(config.get("hard_company_type_value", "Aktiebolag"))
         mask = ~df["bolagstyp"].astype(str).str.contains(val, case=False, na=False)
-        df = _apply_hard(df, mask, "company_type")
+        df = _apply_filter(df, mask, "company_type", filter_types, "hard")
 
     # ------------------------------------------------------------------ #
-    # HARD FILTER 2: Company age (REGISTRERINGSDATUM ≥ N years ago)       #
+    # FILTER 2: Company age (REGISTRERINGSDATUM ≥ N years ago)            #
     # ------------------------------------------------------------------ #
     if config.get("hard_age_enabled", True) and "registreringsdatum" in df.columns:
         min_years = int(config.get("hard_age_min_years", 15))
         cutoff = today - timedelta(days=min_years * 365.25)
         reg_dates = pd.to_datetime(df["registreringsdatum"], errors="coerce").dt.date
         mask = reg_dates.isna() | (reg_dates > cutoff)
-        df = _apply_hard(df, mask, "company_age")
+        df = _apply_filter(df, mask, "company_age", filter_types, "hard")
 
     # ------------------------------------------------------------------ #
-    # HARD FILTER 3: Revenue (OMSÄTTNING in öre)                          #
+    # FILTER 3: Revenue (OMSÄTTNING in öre)                               #
     # ------------------------------------------------------------------ #
     if config.get("hard_revenue_enabled", True) and "omsattning" in df.columns:
         rev_min = int(config.get("hard_revenue_min", 3_000_000)) * 100  # → öre
         rev_max = int(config.get("hard_revenue_max", 30_000_000)) * 100
         rev = pd.to_numeric(df["omsattning"], errors="coerce")
         mask = rev.isna() | (rev < rev_min) | (rev > rev_max)
-        df = _apply_hard(df, mask, "revenue")
+        df = _apply_filter(df, mask, "revenue", filter_types, "hard")
 
     # ------------------------------------------------------------------ #
-    # HARD FILTER 4: Employees                                             #
+    # FILTER 4: Employees                                                  #
     # ------------------------------------------------------------------ #
     if config.get("hard_employees_enabled", True) and "antal_anstallda" in df.columns:
         emp_min = int(config.get("hard_employees_min", 3))
         emp_max = int(config.get("hard_employees_max", 30))
         emp = pd.to_numeric(df["antal_anstallda"], errors="coerce")
         mask = emp.isna() | (emp < emp_min) | (emp > emp_max)
-        df = _apply_hard(df, mask, "employees")
+        df = _apply_filter(df, mask, "employees", filter_types, "hard")
 
     # ------------------------------------------------------------------ #
-    # HARD FILTER 5: SNI code match (prefix-based)                        #
+    # FILTER 5: SNI code match (prefix-based)                             #
     # ------------------------------------------------------------------ #
     if config.get("hard_sni_enabled", True) and "sni_codes" in df.columns:
         sni_prefixes = [str(c).strip() for c in config.get("sni_codes", []) if str(c).strip()]
@@ -145,53 +163,53 @@ def run_phase1(df: pd.DataFrame, config: dict[str, Any]) -> dict[str, Any]:
 
             sni_match = df["sni_codes"].apply(_sni_match)
             mask = ~sni_match
-            df = _apply_hard(df, mask, "sni_code")
+            df = _apply_filter(df, mask, "sni_code", filter_types, "hard")
 
     # ------------------------------------------------------------------ #
-    # HARD FILTER 6: Exclude Publikt Aktiebolag (publicly listed)         #
+    # FILTER 6: Exclude Publikt Aktiebolag (publicly listed)              #
     # ------------------------------------------------------------------ #
     if config.get("hard_exclude_publikt_aktiebolag_enabled", True) and "bolagstyp" in df.columns:
         mask = df["bolagstyp"].astype(str).str.contains("Publikt aktiebolag", case=False, na=False)
-        df = _apply_hard(df, mask, "publikt_aktiebolag")
+        df = _apply_filter(df, mask, "exclude_publikt_aktiebolag", filter_types, "hard")
 
     # ------------------------------------------------------------------ #
-    # HARD FILTER 7: Profitability (ÅRETS RESULTAT > 0)                   #
+    # FILTER 7: Profitability (ÅRETS RESULTAT > 0)                        #
     # ------------------------------------------------------------------ #
     if config.get("hard_profitability_enabled", True) and "arets_resultat" in df.columns:
         result = pd.to_numeric(df["arets_resultat"], errors="coerce")
         mask = result.isna() | (result <= 0)
-        df = _apply_hard(df, mask, "profitability")
+        df = _apply_filter(df, mask, "profitability", filter_types, "hard")
 
     # ------------------------------------------------------------------ #
-    # SOFT FILTER 1: Profit margin ≥ N%                                   #
+    # FILTER 8: Profit margin ≥ N%                                        #
     # ------------------------------------------------------------------ #
     if config.get("soft_margin_enabled", True) and "vinstmarginal" in df.columns:
         min_margin = float(config.get("soft_margin_min_pct", 10.0))
         margin = pd.to_numeric(df["vinstmarginal"], errors="coerce")
         mask = margin.isna() | (margin < min_margin)
-        df = _apply_soft(df, mask, "profit_margin")
+        df = _apply_filter(df, mask, "profit_margin", filter_types, "soft")
 
     # ------------------------------------------------------------------ #
-    # SOFT FILTER 2: Soliditet ≥ N%                                       #
+    # FILTER 9: Soliditet ≥ N%                                            #
     # ------------------------------------------------------------------ #
     if config.get("soft_soliditet_enabled", True) and "soliditet" in df.columns:
         min_soliditet = float(config.get("soft_soliditet_min_pct", 50.0))
         soliditet = pd.to_numeric(df["soliditet"], errors="coerce")
         mask = soliditet.isna() | (soliditet < min_soliditet)
-        df = _apply_soft(df, mask, "soliditet")
+        df = _apply_filter(df, mask, "soliditet", filter_types, "soft")
 
     # ------------------------------------------------------------------ #
-    # SOFT FILTER 3: Data recency (BOKSLUTSPERIOD SLUT within N months)   #
+    # FILTER 10: Data recency (BOKSLUTSPERIOD SLUT within N months)       #
     # ------------------------------------------------------------------ #
     if config.get("soft_recency_enabled", True) and "bokslutsperiod_slut" in df.columns:
         months = int(config.get("soft_recency_months", 18))
         cutoff = today - timedelta(days=months * 30.5)
         bokslut_dates = pd.to_datetime(df["bokslutsperiod_slut"], errors="coerce").dt.date
         mask = bokslut_dates.isna() | (bokslut_dates < cutoff)
-        df = _apply_soft(df, mask, "data_recency")
+        df = _apply_filter(df, mask, "data_recency", filter_types, "soft")
 
     # ------------------------------------------------------------------ #
-    # SOFT FILTER 4: County (optional multi-select)                       #
+    # FILTER 11: County (optional multi-select)                           #
     # ------------------------------------------------------------------ #
     if config.get("soft_county_enabled", False) and "lan" in df.columns:
         counties = config.get("soft_county_values", [])
@@ -199,7 +217,7 @@ def run_phase1(df: pd.DataFrame, config: dict[str, Any]) -> dict[str, Any]:
             counties_lower = [c.lower().strip() for c in counties]
             lan = df["lan"].astype(str).str.lower().str.strip()
             mask = ~lan.isin(counties_lower)
-            df = _apply_soft(df, mask, "county")
+            df = _apply_filter(df, mask, "county", filter_types, "soft")
 
     # ------------------------------------------------------------------ #
     # Compute age (years) for display                                      #
@@ -226,6 +244,20 @@ def run_phase1(df: pd.DataFrame, config: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _apply_filter(
+    df: pd.DataFrame,
+    fail_mask: pd.Series,
+    filter_name: str,
+    filter_types: dict[str, str],
+    default_type: str,
+) -> pd.DataFrame:
+    """Apply a filter as hard or soft based on filter_types config."""
+    ftype = filter_types.get(filter_name, default_type)
+    if ftype == "hard":
+        return _apply_hard(df, fail_mask, filter_name)
+    return _apply_soft(df, fail_mask, filter_name)
+
 
 def _apply_hard(df: pd.DataFrame, fail_mask: pd.Series, filter_name: str) -> pd.DataFrame:
     """Mark rows where fail_mask is True as hard-failed with the given filter name."""

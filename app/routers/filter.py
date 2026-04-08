@@ -26,9 +26,14 @@ _ACTIVE_FILTER_CONFIG: dict = {}
 
 def get_active_config() -> dict:
     """Return the current active filter configuration, falling back to defaults."""
-    if not _ACTIVE_FILTER_CONFIG:
-        return DEFAULT_FILTER_CONFIG.copy()
-    return _ACTIVE_FILTER_CONFIG.copy()
+    base = DEFAULT_FILTER_CONFIG.copy()
+    # Ensure nested filter_types dict is also merged so old configs get new keys
+    base["filter_types"] = DEFAULT_FILTER_CONFIG["filter_types"].copy()
+    if _ACTIVE_FILTER_CONFIG:
+        stored_types = _ACTIVE_FILTER_CONFIG.get("filter_types", {})
+        base.update(_ACTIVE_FILTER_CONFIG)
+        base["filter_types"] = {**DEFAULT_FILTER_CONFIG["filter_types"], **stored_types}
+    return base
 
 
 def set_active_config(cfg: dict) -> None:
@@ -70,6 +75,25 @@ def _parse_form(form_data: dict) -> dict:
     county_raw = form_data.get("soft_county_values_text", "")
     county_values = [c.strip() for c in county_raw.split(",") if c.strip()]
 
+    # Per-filter type overrides
+    def _type(filter_name: str, default: str) -> str:
+        val = str(form_data.get(f"filter_type_{filter_name}", default)).strip()
+        return val if val in ("hard", "soft") else default
+
+    filter_types = {
+        "company_type": _type("company_type", "hard"),
+        "company_age": _type("company_age", "hard"),
+        "revenue": _type("revenue", "hard"),
+        "employees": _type("employees", "hard"),
+        "sni_code": _type("sni_code", "hard"),
+        "profitability": _type("profitability", "hard"),
+        "exclude_publikt_aktiebolag": _type("exclude_publikt_aktiebolag", "hard"),
+        "profit_margin": _type("profit_margin", "soft"),
+        "soliditet": _type("soliditet", "soft"),
+        "data_recency": _type("data_recency", "soft"),
+        "county": _type("county", "soft"),
+    }
+
     revenue_min = _int("hard_revenue_min", 3_000_000)
     revenue_max = _int("hard_revenue_max", 30_000_000)
     employees_min = _int("hard_employees_min", 3)
@@ -99,6 +123,7 @@ def _parse_form(form_data: dict) -> dict:
         "soft_recency_months": _int("soft_recency_months", 18),
         "soft_county_enabled": _bool("soft_county_enabled"),
         "soft_county_values": county_values,
+        "filter_types": filter_types,
         # Display helpers
         "revenue_min_msek": revenue_min // 1_000_000,
         "revenue_max_msek": revenue_max // 1_000_000,
