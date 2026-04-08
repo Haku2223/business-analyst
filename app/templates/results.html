@@ -29,11 +29,17 @@
 .filter-bar { display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px; }
 .filter-bar input, .filter-bar select { padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px; }
 /* Filter panel rows */
-.fp-row { display:flex;align-items:center;gap:8px;padding:5px 0;font-size:13px; }
-.fp-row label { display:flex;align-items:center;gap:6px;white-space:nowrap;font-weight:500; }
+.fp-row { display:grid;grid-template-columns:20px 1fr 118px auto;gap:8px;align-items:center;padding:5px 0;font-size:13px;border-bottom:1px solid #f3f4f6; }
+.fp-row:last-child { border-bottom:none; }
+.fp-row label { white-space:nowrap;font-weight:500;cursor:pointer; }
 .fp-row input[type=number], .fp-row input[type=text] { padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:12px; }
-.fp-unit { color:#9ca3af;font-size:12px; }
-#filter-panel .card-body { max-height:400px;overflow-y:auto; }
+.fp-inputs { display:flex;gap:4px;align-items:center; }
+.fp-unit { color:#9ca3af;font-size:12px;white-space:nowrap; }
+.fp-type-select { padding:3px 6px;border-radius:4px;font-size:11px;font-weight:600;border:1px solid #d1d5db;width:118px;cursor:pointer; }
+.fp-type-select.is-hard { background:#fee2e2;color:#991b1b;border-color:#fca5a5; }
+.fp-type-select.is-soft { background:#fef9c3;color:#713f12;border-color:#fde68a; }
+.fp-col-header { font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em; }
+#filter-panel .card-body { max-height:480px;overflow-y:auto; }
 </style>
 {% endblock %}
 
@@ -70,81 +76,162 @@
     </div>
   </div>
   <div class="card-body" style="padding:14px 18px">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px 32px">
+    {% set ft = cfg.get('filter_types', {}) %}
 
-      <!-- Hard filters column -->
-      <div>
-        <h4 style="font-size:12px;font-weight:700;color:#991b1b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Hard Filters (exclude if fails)</h4>
-
-        <div class="fp-row">
-          <label><input type="checkbox" id="fp-hard_company_type_enabled" {% if cfg.hard_company_type_enabled %}checked{% endif %} /> Company Type contains</label>
-          <input type="text" id="fp-hard_company_type_value" value="{{ cfg.hard_company_type_value }}" style="width:120px" />
-        </div>
-
-        <div class="fp-row">
-          <label><input type="checkbox" id="fp-hard_age_enabled" {% if cfg.hard_age_enabled %}checked{% endif %} /> Company Age &ge;</label>
-          <input type="number" id="fp-hard_age_min_years" value="{{ cfg.hard_age_min_years }}" min="0" max="100" style="width:70px" />
-          <span class="fp-unit">years</span>
-        </div>
-
-        <div class="fp-row">
-          <label><input type="checkbox" id="fp-hard_revenue_enabled" {% if cfg.hard_revenue_enabled %}checked{% endif %} /> Revenue (SEK)</label>
-          <input type="number" id="fp-hard_revenue_min" value="{{ cfg.hard_revenue_min }}" min="0" step="100000" style="width:110px" />
-          <span class="fp-unit">&ndash;</span>
-          <input type="number" id="fp-hard_revenue_max" value="{{ cfg.hard_revenue_max }}" min="0" step="100000" style="width:110px" />
-        </div>
-
-        <div class="fp-row">
-          <label><input type="checkbox" id="fp-hard_employees_enabled" {% if cfg.hard_employees_enabled %}checked{% endif %} /> Employees</label>
-          <input type="number" id="fp-hard_employees_min" value="{{ cfg.hard_employees_min }}" min="0" style="width:70px" />
-          <span class="fp-unit">&ndash;</span>
-          <input type="number" id="fp-hard_employees_max" value="{{ cfg.hard_employees_max }}" min="0" style="width:70px" />
-        </div>
-
-        <div class="fp-row">
-          <label><input type="checkbox" id="fp-hard_sni_enabled" {% if cfg.hard_sni_enabled %}checked{% endif %} /> SNI Code Match</label>
-        </div>
-        <textarea id="fp-sni_codes_text" style="width:100%;height:60px;font-size:11px;font-family:monospace;padding:6px;border:1px solid #d1d5db;border-radius:4px;margin-bottom:6px" placeholder="Comma or newline separated">{{ cfg.sni_codes | join(', ') }}</textarea>
-
-        <div class="fp-row">
-          <label><input type="checkbox" id="fp-hard_profitability_enabled" {% if cfg.hard_profitability_enabled %}checked{% endif %} /> Profitability (Result &gt; 0)</label>
-        </div>
-
-        <div class="fp-row">
-          <label><input type="checkbox" id="fp-hard_exclude_publikt_aktiebolag_enabled" {% if cfg.hard_exclude_publikt_aktiebolag_enabled %}checked{% endif %} /> Exclude Publikt Aktiebolag (listed companies)</label>
-        </div>
-      </div>
-
-      <!-- Soft filters column -->
-      <div>
-        <h4 style="font-size:12px;font-weight:700;color:#713f12;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Soft Filters (&minus;1 score if fails)</h4>
-
-        <div class="fp-row">
-          <label><input type="checkbox" id="fp-soft_margin_enabled" {% if cfg.soft_margin_enabled %}checked{% endif %} /> Profit Margin &ge;</label>
-          <input type="number" id="fp-soft_margin_min_pct" value="{{ cfg.soft_margin_min_pct }}" min="0" max="100" step="0.5" style="width:70px" />
-          <span class="fp-unit">%</span>
-        </div>
-
-        <div class="fp-row">
-          <label><input type="checkbox" id="fp-soft_soliditet_enabled" {% if cfg.soft_soliditet_enabled %}checked{% endif %} /> Soliditet &ge;</label>
-          <input type="number" id="fp-soft_soliditet_min_pct" value="{{ cfg.soft_soliditet_min_pct }}" min="0" max="100" step="0.5" style="width:70px" />
-          <span class="fp-unit">%</span>
-        </div>
-
-        <div class="fp-row">
-          <label><input type="checkbox" id="fp-soft_recency_enabled" {% if cfg.soft_recency_enabled %}checked{% endif %} /> Data Recency within</label>
-          <input type="number" id="fp-soft_recency_months" value="{{ cfg.soft_recency_months }}" min="1" max="60" style="width:70px" />
-          <span class="fp-unit">months</span>
-        </div>
-
-        <div class="fp-row">
-          <label><input type="checkbox" id="fp-soft_county_enabled" {% if cfg.soft_county_enabled %}checked{% endif %} /> County (LÄN)</label>
-        </div>
-        <input type="text" id="fp-soft_county_values_text" value="{{ cfg.soft_county_values | join(', ') }}"
-               placeholder="e.g. Stockholms län, Västra Götalands län" style="width:100%;padding:6px;border:1px solid #d1d5db;border-radius:4px;font-size:12px" />
-      </div>
-
+    <!-- Column headers -->
+    <div style="display:grid;grid-template-columns:20px 1fr 118px auto;gap:8px;padding:0 0 6px 0;border-bottom:2px solid #e5e7eb;margin-bottom:2px">
+      <div></div>
+      <div class="fp-col-header">Filter</div>
+      <div class="fp-col-header">Type</div>
+      <div class="fp-col-header">Threshold</div>
     </div>
+
+    <!-- Company type -->
+    <div class="fp-row">
+      <input type="checkbox" id="fp-hard_company_type_enabled" {% if cfg.hard_company_type_enabled %}checked{% endif %} />
+      <label for="fp-hard_company_type_enabled">Company Type contains</label>
+      <select id="fp-filter_type_company_type" class="fp-type-select {% if ft.get('company_type','hard')=='hard' %}is-hard{% else %}is-soft{% endif %}" onchange="updateFpTypeStyle(this)">
+        <option value="hard" {% if ft.get('company_type','hard')=='hard' %}selected{% endif %}>Hard — exclude</option>
+        <option value="soft" {% if ft.get('company_type','hard')=='soft' %}selected{% endif %}>Soft — score</option>
+      </select>
+      <div class="fp-inputs">
+        <input type="text" id="fp-hard_company_type_value" value="{{ cfg.hard_company_type_value }}" style="width:120px" />
+      </div>
+    </div>
+
+    <!-- Company age -->
+    <div class="fp-row">
+      <input type="checkbox" id="fp-hard_age_enabled" {% if cfg.hard_age_enabled %}checked{% endif %} />
+      <label for="fp-hard_age_enabled">Company Age &ge;</label>
+      <select id="fp-filter_type_company_age" class="fp-type-select {% if ft.get('company_age','hard')=='hard' %}is-hard{% else %}is-soft{% endif %}" onchange="updateFpTypeStyle(this)">
+        <option value="hard" {% if ft.get('company_age','hard')=='hard' %}selected{% endif %}>Hard — exclude</option>
+        <option value="soft" {% if ft.get('company_age','hard')=='soft' %}selected{% endif %}>Soft — score</option>
+      </select>
+      <div class="fp-inputs">
+        <input type="number" id="fp-hard_age_min_years" value="{{ cfg.hard_age_min_years }}" min="0" max="100" style="width:70px" />
+        <span class="fp-unit">years</span>
+      </div>
+    </div>
+
+    <!-- Revenue -->
+    <div class="fp-row">
+      <input type="checkbox" id="fp-hard_revenue_enabled" {% if cfg.hard_revenue_enabled %}checked{% endif %} />
+      <label for="fp-hard_revenue_enabled">Revenue (SEK)</label>
+      <select id="fp-filter_type_revenue" class="fp-type-select {% if ft.get('revenue','hard')=='hard' %}is-hard{% else %}is-soft{% endif %}" onchange="updateFpTypeStyle(this)">
+        <option value="hard" {% if ft.get('revenue','hard')=='hard' %}selected{% endif %}>Hard — exclude</option>
+        <option value="soft" {% if ft.get('revenue','hard')=='soft' %}selected{% endif %}>Soft — score</option>
+      </select>
+      <div class="fp-inputs">
+        <input type="number" id="fp-hard_revenue_min" value="{{ cfg.hard_revenue_min }}" min="0" step="100000" style="width:105px" />
+        <span class="fp-unit">&ndash;</span>
+        <input type="number" id="fp-hard_revenue_max" value="{{ cfg.hard_revenue_max }}" min="0" step="100000" style="width:105px" />
+      </div>
+    </div>
+
+    <!-- Employees -->
+    <div class="fp-row">
+      <input type="checkbox" id="fp-hard_employees_enabled" {% if cfg.hard_employees_enabled %}checked{% endif %} />
+      <label for="fp-hard_employees_enabled">Employees</label>
+      <select id="fp-filter_type_employees" class="fp-type-select {% if ft.get('employees','hard')=='hard' %}is-hard{% else %}is-soft{% endif %}" onchange="updateFpTypeStyle(this)">
+        <option value="hard" {% if ft.get('employees','hard')=='hard' %}selected{% endif %}>Hard — exclude</option>
+        <option value="soft" {% if ft.get('employees','hard')=='soft' %}selected{% endif %}>Soft — score</option>
+      </select>
+      <div class="fp-inputs">
+        <input type="number" id="fp-hard_employees_min" value="{{ cfg.hard_employees_min }}" min="0" style="width:70px" />
+        <span class="fp-unit">&ndash;</span>
+        <input type="number" id="fp-hard_employees_max" value="{{ cfg.hard_employees_max }}" min="0" style="width:70px" />
+      </div>
+    </div>
+
+    <!-- SNI codes -->
+    <div class="fp-row">
+      <input type="checkbox" id="fp-hard_sni_enabled" {% if cfg.hard_sni_enabled %}checked{% endif %} />
+      <label for="fp-hard_sni_enabled">SNI Code Match</label>
+      <select id="fp-filter_type_sni_code" class="fp-type-select {% if ft.get('sni_code','hard')=='hard' %}is-hard{% else %}is-soft{% endif %}" onchange="updateFpTypeStyle(this)">
+        <option value="hard" {% if ft.get('sni_code','hard')=='hard' %}selected{% endif %}>Hard — exclude</option>
+        <option value="soft" {% if ft.get('sni_code','hard')=='soft' %}selected{% endif %}>Soft — score</option>
+      </select>
+      <div></div>
+    </div>
+    <textarea id="fp-sni_codes_text" style="width:100%;height:52px;font-size:11px;font-family:monospace;padding:6px;border:1px solid #d1d5db;border-radius:4px;margin:2px 0 4px" placeholder="Comma or newline separated">{{ cfg.sni_codes | join(', ') }}</textarea>
+
+    <!-- Profitability -->
+    <div class="fp-row">
+      <input type="checkbox" id="fp-hard_profitability_enabled" {% if cfg.hard_profitability_enabled %}checked{% endif %} />
+      <label for="fp-hard_profitability_enabled">Profitability (Result &gt; 0)</label>
+      <select id="fp-filter_type_profitability" class="fp-type-select {% if ft.get('profitability','hard')=='hard' %}is-hard{% else %}is-soft{% endif %}" onchange="updateFpTypeStyle(this)">
+        <option value="hard" {% if ft.get('profitability','hard')=='hard' %}selected{% endif %}>Hard — exclude</option>
+        <option value="soft" {% if ft.get('profitability','hard')=='soft' %}selected{% endif %}>Soft — score</option>
+      </select>
+      <div></div>
+    </div>
+
+    <!-- Exclude Publikt Aktiebolag -->
+    <div class="fp-row">
+      <input type="checkbox" id="fp-hard_exclude_publikt_aktiebolag_enabled" {% if cfg.hard_exclude_publikt_aktiebolag_enabled %}checked{% endif %} />
+      <label for="fp-hard_exclude_publikt_aktiebolag_enabled">Exclude Publikt Aktiebolag</label>
+      <select id="fp-filter_type_exclude_publikt_aktiebolag" class="fp-type-select {% if ft.get('exclude_publikt_aktiebolag','hard')=='hard' %}is-hard{% else %}is-soft{% endif %}" onchange="updateFpTypeStyle(this)">
+        <option value="hard" {% if ft.get('exclude_publikt_aktiebolag','hard')=='hard' %}selected{% endif %}>Hard — exclude</option>
+        <option value="soft" {% if ft.get('exclude_publikt_aktiebolag','hard')=='soft' %}selected{% endif %}>Soft — score</option>
+      </select>
+      <div></div>
+    </div>
+
+    <!-- Profit margin -->
+    <div class="fp-row">
+      <input type="checkbox" id="fp-soft_margin_enabled" {% if cfg.soft_margin_enabled %}checked{% endif %} />
+      <label for="fp-soft_margin_enabled">Profit Margin &ge;</label>
+      <select id="fp-filter_type_profit_margin" class="fp-type-select {% if ft.get('profit_margin','soft')=='hard' %}is-hard{% else %}is-soft{% endif %}" onchange="updateFpTypeStyle(this)">
+        <option value="hard" {% if ft.get('profit_margin','soft')=='hard' %}selected{% endif %}>Hard — exclude</option>
+        <option value="soft" {% if ft.get('profit_margin','soft')=='soft' %}selected{% endif %}>Soft — score</option>
+      </select>
+      <div class="fp-inputs">
+        <input type="number" id="fp-soft_margin_min_pct" value="{{ cfg.soft_margin_min_pct }}" min="0" max="100" step="0.5" style="width:70px" />
+        <span class="fp-unit">%</span>
+      </div>
+    </div>
+
+    <!-- Soliditet -->
+    <div class="fp-row">
+      <input type="checkbox" id="fp-soft_soliditet_enabled" {% if cfg.soft_soliditet_enabled %}checked{% endif %} />
+      <label for="fp-soft_soliditet_enabled">Soliditet &ge;</label>
+      <select id="fp-filter_type_soliditet" class="fp-type-select {% if ft.get('soliditet','soft')=='hard' %}is-hard{% else %}is-soft{% endif %}" onchange="updateFpTypeStyle(this)">
+        <option value="hard" {% if ft.get('soliditet','soft')=='hard' %}selected{% endif %}>Hard — exclude</option>
+        <option value="soft" {% if ft.get('soliditet','soft')=='soft' %}selected{% endif %}>Soft — score</option>
+      </select>
+      <div class="fp-inputs">
+        <input type="number" id="fp-soft_soliditet_min_pct" value="{{ cfg.soft_soliditet_min_pct }}" min="0" max="100" step="0.5" style="width:70px" />
+        <span class="fp-unit">%</span>
+      </div>
+    </div>
+
+    <!-- Data recency -->
+    <div class="fp-row">
+      <input type="checkbox" id="fp-soft_recency_enabled" {% if cfg.soft_recency_enabled %}checked{% endif %} />
+      <label for="fp-soft_recency_enabled">Data Recency within</label>
+      <select id="fp-filter_type_data_recency" class="fp-type-select {% if ft.get('data_recency','soft')=='hard' %}is-hard{% else %}is-soft{% endif %}" onchange="updateFpTypeStyle(this)">
+        <option value="hard" {% if ft.get('data_recency','soft')=='hard' %}selected{% endif %}>Hard — exclude</option>
+        <option value="soft" {% if ft.get('data_recency','soft')=='soft' %}selected{% endif %}>Soft — score</option>
+      </select>
+      <div class="fp-inputs">
+        <input type="number" id="fp-soft_recency_months" value="{{ cfg.soft_recency_months }}" min="1" max="60" style="width:70px" />
+        <span class="fp-unit">months</span>
+      </div>
+    </div>
+
+    <!-- County -->
+    <div class="fp-row">
+      <input type="checkbox" id="fp-soft_county_enabled" {% if cfg.soft_county_enabled %}checked{% endif %} />
+      <label for="fp-soft_county_enabled">County (LÄN)</label>
+      <select id="fp-filter_type_county" class="fp-type-select {% if ft.get('county','soft')=='hard' %}is-hard{% else %}is-soft{% endif %}" onchange="updateFpTypeStyle(this)">
+        <option value="hard" {% if ft.get('county','soft')=='hard' %}selected{% endif %}>Hard — exclude</option>
+        <option value="soft" {% if ft.get('county','soft')=='soft' %}selected{% endif %}>Soft — score</option>
+      </select>
+      <div></div>
+    </div>
+    <input type="text" id="fp-soft_county_values_text" value="{{ cfg.soft_county_values | join(', ') }}"
+           placeholder="e.g. Stockholms län, Västra Götalands län" style="width:100%;padding:6px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;margin:2px 0 4px" />
+
   </div>
 </div>
 
@@ -359,20 +446,20 @@ headers.forEach(th => {
 });
 
 // Flag explanation popover
-const HARD_LABELS = {
-  'company_type':  { label: 'Not an Aktiebolag',       desc: 'Company type does not match "Aktiebolag"' },
-  'company_age':   { label: 'Company too young',        desc: 'Registered less than 15 years ago' },
-  'revenue':       { label: 'Revenue out of range',     desc: 'Revenue is outside the 3–30 MSEK range' },
-  'employees':     { label: 'Headcount out of range',   desc: 'Employees are outside the 3–30 range' },
-  'sni_code':      { label: 'SNI code not matched',     desc: 'No SNI code matches the configured target list' },
-  'profitability':          { label: 'Unprofitable',             desc: 'Net result (årets resultat) is zero or negative' },
-  'publikt_aktiebolag':     { label: 'Publikt Aktiebolag',       desc: 'Company is publicly listed (Publikt aktiebolag)' },
-};
-const SOFT_LABELS = {
-  'soft:profit_margin': { label: 'Low profit margin',      desc: 'Profit margin is below the 10% threshold' },
-  'soft:soliditet':     { label: 'Low soliditet',          desc: 'Equity ratio (soliditet) is below 50%' },
-  'soft:data_recency':  { label: 'Stale financials',       desc: 'Latest annual report is older than 18 months' },
-  'soft:county':        { label: 'Outside target county',  desc: 'Company is not in the selected county filter' },
+// Filters can be hard or soft depending on config, so store labels by base name.
+const FILTER_LABELS = {
+  'company_type':              { label: 'Not an Aktiebolag',      desc: 'Company type does not match the configured value' },
+  'company_age':               { label: 'Company too young',       desc: 'Registered less than the configured number of years ago' },
+  'revenue':                   { label: 'Revenue out of range',    desc: 'Revenue is outside the configured SEK range' },
+  'employees':                 { label: 'Headcount out of range',  desc: 'Employees are outside the configured range' },
+  'sni_code':                  { label: 'SNI code not matched',    desc: 'No SNI code matches the configured target list' },
+  'profitability':             { label: 'Unprofitable',            desc: 'Net result (årets resultat) is zero or negative' },
+  'exclude_publikt_aktiebolag':{ label: 'Publikt Aktiebolag',      desc: 'Company is publicly listed (Publikt aktiebolag)' },
+  'publikt_aktiebolag':        { label: 'Publikt Aktiebolag',      desc: 'Company is publicly listed (Publikt aktiebolag)' },
+  'profit_margin':             { label: 'Low profit margin',       desc: 'Profit margin is below the configured threshold' },
+  'soliditet':                 { label: 'Low soliditet',           desc: 'Equity ratio (soliditet) is below the configured threshold' },
+  'data_recency':              { label: 'Stale financials',        desc: 'Latest annual report is older than the configured period' },
+  'county':                    { label: 'Outside target county',   desc: 'Company is not in the selected county filter' },
 };
 
 let activePopover = null;
@@ -389,19 +476,20 @@ function showFlagPopover(event, btn) {
   const hardFlags = flags.filter(f => !String(f).startsWith('soft:'));
   const softFlags = flags.filter(f => String(f).startsWith('soft:'));
 
-  function renderItems(list, labelMap, iconClass) {
+  function renderItems(list, iconClass) {
     return list.map(f => {
-      const info = labelMap[f] || { label: f.replace('soft:', ''), desc: 'Filter threshold not met' };
+      const baseName = String(f).replace(/^soft:/, '');
+      const info = FILTER_LABELS[baseName] || { label: baseName, desc: 'Filter threshold not met' };
       return `<li><span class="${iconClass}">●</span><div><strong>${info.label}</strong><br><span style="color:#94a3b8">${info.desc}</span></div></li>`;
     }).join('');
   }
 
   let html = '';
   if (hardFlags.length) {
-    html += `<h4>❌ Phase 1 rejected</h4><ul>${renderItems(hardFlags, HARD_LABELS, 'fi-hard')}</ul>`;
+    html += `<h4>❌ Phase 1 rejected</h4><ul>${renderItems(hardFlags, 'fi-hard')}</ul>`;
   }
   if (softFlags.length) {
-    html += `<h4>⚑ Soft warnings</h4><ul>${renderItems(softFlags, SOFT_LABELS, 'fi-soft')}</ul>`;
+    html += `<h4>⚑ Soft warnings</h4><ul>${renderItems(softFlags, 'fi-soft')}</ul>`;
   }
 
   const pop = document.createElement('div');
@@ -471,6 +559,21 @@ function populateFilterPanel(cfg) {
   if (sniEl && cfg.sni_codes) sniEl.value = Array.isArray(cfg.sni_codes) ? cfg.sni_codes.join(', ') : cfg.sni_codes;
   const countyEl = document.getElementById('fp-soft_county_values_text');
   if (countyEl && cfg.soft_county_values) countyEl.value = Array.isArray(cfg.soft_county_values) ? cfg.soft_county_values.join(', ') : cfg.soft_county_values;
+
+  // Populate per-filter type selects
+  const filterTypes = cfg.filter_types || {};
+  const typeDefaults = {
+    company_type: 'hard', company_age: 'hard', revenue: 'hard', employees: 'hard',
+    sni_code: 'hard', profitability: 'hard', exclude_publikt_aktiebolag: 'hard',
+    profit_margin: 'soft', soliditet: 'soft', data_recency: 'soft', county: 'soft',
+  };
+  Object.entries(typeDefaults).forEach(([name, def]) => {
+    const sel = document.getElementById('fp-filter_type_' + name);
+    if (sel) {
+      sel.value = filterTypes[name] || def;
+      updateFpTypeStyle(sel);
+    }
+  });
 }
 
 // Load preset into filter panel fields via API
@@ -506,6 +609,18 @@ function collectFilterConfig() {
   const empMax = parseInt(document.getElementById('fp-hard_employees_max').value) || 30;
   const ageMin = parseInt(document.getElementById('fp-hard_age_min_years').value) || 15;
 
+  // Collect per-filter type selects
+  const typeNames = [
+    'company_type', 'company_age', 'revenue', 'employees', 'sni_code',
+    'profitability', 'exclude_publikt_aktiebolag',
+    'profit_margin', 'soliditet', 'data_recency', 'county',
+  ];
+  const filter_types = {};
+  typeNames.forEach(name => {
+    const sel = document.getElementById('fp-filter_type_' + name);
+    if (sel) filter_types[name] = sel.value;
+  });
+
   return {
     hard_company_type_enabled: document.getElementById('fp-hard_company_type_enabled').checked,
     hard_company_type_value: document.getElementById('fp-hard_company_type_value').value || 'Aktiebolag',
@@ -529,6 +644,7 @@ function collectFilterConfig() {
     soft_recency_months: parseInt(document.getElementById('fp-soft_recency_months').value) || 18,
     soft_county_enabled: document.getElementById('fp-soft_county_enabled').checked,
     soft_county_values: countyValues,
+    filter_types: filter_types,
     revenue_min_msek: Math.floor(revMin / 1000000),
     revenue_max_msek: Math.floor(revMax / 1000000),
     employees_min: empMin,
@@ -574,6 +690,12 @@ async function applyNewFilters() {
     btn.textContent = origText;
     btn.disabled = false;
   }
+}
+
+// Update type select color when changed
+function updateFpTypeStyle(sel) {
+  sel.classList.remove('is-hard', 'is-soft');
+  sel.classList.add(sel.value === 'hard' ? 'is-hard' : 'is-soft');
 }
 
 // Status update via AJAX

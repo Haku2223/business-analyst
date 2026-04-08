@@ -177,10 +177,17 @@ async def results_page(
 
         # Load the batch's filter config for the inline filter panel
         batch_filter_cfg = DEFAULT_FILTER_CONFIG.copy()
+        batch_filter_cfg["filter_types"] = DEFAULT_FILTER_CONFIG["filter_types"].copy()
         if batch_id:
             current_batch = await db.get(Batch, batch_id)
             if current_batch and current_batch.filter_config_json:
-                batch_filter_cfg.update(current_batch.filter_config_json)
+                stored = current_batch.filter_config_json
+                stored_types = stored.get("filter_types", {})
+                batch_filter_cfg.update(stored)
+                batch_filter_cfg["filter_types"] = {
+                    **DEFAULT_FILTER_CONFIG["filter_types"],
+                    **stored_types,
+                }
 
         # Load presets for the filter panel dropdown
         presets_result = await db.execute(
@@ -248,9 +255,12 @@ async def refilter_batch(request: Request, batch_id: int):
     body = await request.json()
     new_config = body.get("config", {})
 
-    # Merge with defaults so all keys are present
+    # Merge with defaults so all keys are present; deep-merge filter_types
     filter_config = DEFAULT_FILTER_CONFIG.copy()
-    filter_config.update(new_config)
+    filter_config["filter_types"] = DEFAULT_FILTER_CONFIG["filter_types"].copy()
+    new_types = new_config.get("filter_types", {})
+    filter_config.update({k: v for k, v in new_config.items() if k != "filter_types"})
+    filter_config["filter_types"].update(new_types)
 
     async for db in get_db():
         batch = await db.get(Batch, batch_id)
