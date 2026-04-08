@@ -36,7 +36,7 @@ async def upload_page(request: Request):
         return RedirectResponse("/login", status_code=302)
 
     display_name = get_display_name(request)
-    filter_config = DEFAULT_FILTER_CONFIG
+    filter_config = get_active_config()
 
     return templates.TemplateResponse(
         "upload.html",

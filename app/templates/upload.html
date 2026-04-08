@@ -79,10 +79,32 @@
           </div>
           {% if filter_config %}
           <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px">
+            {% if filter_config.hard_revenue_enabled %}
             <span class="badge badge-blue">Revenue: {{ filter_config.revenue_min_msek }}–{{ filter_config.revenue_max_msek }} MSEK</span>
+            {% else %}
+            <span class="badge badge-grey" title="Disabled">Revenue: off</span>
+            {% endif %}
+            {% if filter_config.hard_employees_enabled %}
             <span class="badge badge-blue">Employees: {{ filter_config.employees_min }}–{{ filter_config.employees_max }}</span>
+            {% else %}
+            <span class="badge badge-grey" title="Disabled">Employees: off</span>
+            {% endif %}
+            {% if filter_config.hard_age_enabled %}
             <span class="badge badge-blue">Age: ≥{{ filter_config.min_age_years }} years</span>
+            {% else %}
+            <span class="badge badge-grey" title="Disabled">Age: off</span>
+            {% endif %}
+            {% if filter_config.hard_sni_enabled %}
             <span class="badge badge-blue">{{ filter_config.sni_codes|length }} SNI prefixes</span>
+            {% else %}
+            <span class="badge badge-grey" title="Disabled">SNI: off</span>
+            {% endif %}
+            {% if filter_config.hard_profitability_enabled %}
+            <span class="badge badge-blue">Profitable only</span>
+            {% endif %}
+            {% if filter_config.hard_exclude_publikt_aktiebolag_enabled %}
+            <span class="badge badge-blue">Excl. Publikt AB</span>
+            {% endif %}
           </div>
           {% endif %}
         </div>
