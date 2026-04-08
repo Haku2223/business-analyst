@@ -90,6 +90,7 @@ def _parse_form(form_data: dict) -> dict:
         "hard_sni_enabled": _bool("hard_sni_enabled"),
         "sni_codes": sni_codes,
         "hard_profitability_enabled": _bool("hard_profitability_enabled"),
+        "hard_exclude_publikt_aktiebolag_enabled": _bool("hard_exclude_publikt_aktiebolag_enabled"),
         "soft_margin_enabled": _bool("soft_margin_enabled"),
         "soft_margin_min_pct": _float("soft_margin_min_pct", 10.0),
         "soft_soliditet_enabled": _bool("soft_soliditet_enabled"),
