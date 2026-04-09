@@ -39,14 +39,13 @@ USER_AGENT = (
 
 # Default Phase 2a filter config
 DEFAULT_PHASE2A_CONFIG: dict[str, Any] = {
-    # Hard filters
+    # Filters (enabled by default)
     "p2a_hard_profitability_3of5_enabled": True,
     "p2a_hard_profitability_min_years": 3,
 
     "p2a_hard_revenue_decline_enabled": True,
     "p2a_hard_revenue_max_decline_pct": 15.0,
 
-    # Soft filters
     "p2a_soft_employee_trend_enabled": True,
     "p2a_soft_employee_shrink_max_pct": 40.0,
 
@@ -56,6 +55,15 @@ DEFAULT_PHASE2A_CONFIG: dict[str, Any] = {
     "p2a_soft_margin_consistency_enabled": True,
     "p2a_soft_margin_min_pct": 5.0,
     "p2a_soft_margin_min_years": 3,
+
+    # Per-filter type overrides: "hard" = exclude on fail, "soft" = warning flag on fail
+    "p2a_filter_types": {
+        "profitability_3of5": "hard",
+        "revenue_decline": "hard",
+        "employee_trend": "soft",
+        "revenue_cagr": "soft",
+        "consistent_margin": "soft",
+    },
 }
 
 
@@ -460,8 +468,18 @@ def apply_phase2a_filters(
     }
 
     num_years = len(historical)
+    filter_types = config.get("p2a_filter_types", {})
 
-    # ----- HARD FILTER 1: Profitability 3 of 5 years -----
+    def _record_failure(filter_name: str, default_type: str) -> None:
+        """Route a filter failure to hard_failed or soft_failed based on filter_types config."""
+        ftype = filter_types.get(filter_name, default_type)
+        if ftype == "hard":
+            result["hard_failed"].append(filter_name)
+            result["passed"] = False
+        else:
+            result["soft_failed"].append(filter_name)
+
+    # ----- FILTER 1: Profitability N of 5 years -----
     if config.get("p2a_hard_profitability_3of5_enabled", True):
         min_profitable_years = int(config.get("p2a_hard_profitability_min_years", 3))
         net_results = []
@@ -476,10 +494,9 @@ def apply_phase2a_filters(
 
         if num_years >= 3:  # Only apply if we have enough data
             if profitable_count < min_profitable_years:
-                result["hard_failed"].append("profitability_3of5")
-                result["passed"] = False
+                _record_failure("profitability_3of5", "hard")
 
-    # ----- HARD FILTER 2: Revenue decline ≤15% in any 2-year period -----
+    # ----- FILTER 2: Revenue decline in any 2-year period -----
     if config.get("p2a_hard_revenue_decline_enabled", True):
         max_decline_pct = float(config.get("p2a_hard_revenue_max_decline_pct", 15.0))
         revenues = []
@@ -508,10 +525,9 @@ def apply_phase2a_filters(
         result["details"]["decline_periods"] = decline_periods
 
         if max_decline_found > max_decline_pct:
-            result["hard_failed"].append("revenue_decline")
-            result["passed"] = False
+            _record_failure("revenue_decline", "hard")
 
-    # ----- SOFT FILTER 1: Employee trend -----
+    # ----- FILTER 3: Employee trend -----
     if config.get("p2a_soft_employee_trend_enabled", True):
         max_shrink_pct = float(config.get("p2a_soft_employee_shrink_max_pct", 40.0))
         employees = [y.get("anstallda") for y in historical]
@@ -527,9 +543,9 @@ def apply_phase2a_filters(
                 shrink_pct = ((oldest_emp - newest_emp) / oldest_emp) * 100
                 result["details"]["employee_shrink_pct"] = round(shrink_pct, 1)
                 if shrink_pct > max_shrink_pct:
-                    result["soft_failed"].append("employee_trend")
+                    _record_failure("employee_trend", "soft")
 
-    # ----- SOFT FILTER 2: Revenue CAGR -----
+    # ----- FILTER 4: Revenue CAGR -----
     if config.get("p2a_soft_revenue_cagr_enabled", True):
         min_cagr = float(config.get("p2a_soft_revenue_cagr_min_pct", -5.0))
         revenues = []
@@ -548,9 +564,9 @@ def apply_phase2a_filters(
                 cagr = ((newest_rev / oldest_rev) ** (1.0 / years_span) - 1) * 100
                 result["details"]["revenue_cagr_pct"] = round(cagr, 1)
                 if cagr < min_cagr:
-                    result["soft_failed"].append("revenue_cagr")
+                    _record_failure("revenue_cagr", "soft")
 
-    # ----- SOFT FILTER 3: Consistent margin -----
+    # ----- FILTER 5: Consistent margin -----
     if config.get("p2a_soft_margin_consistency_enabled", True):
         min_margin = float(config.get("p2a_soft_margin_min_pct", 5.0))
         min_years = int(config.get("p2a_soft_margin_min_years", 3))
@@ -560,7 +576,7 @@ def apply_phase2a_filters(
         )
         result["details"]["margin_above_threshold_years"] = above_threshold
         if above_threshold < min_years:
-            result["soft_failed"].append("consistent_margin")
+            _record_failure("consistent_margin", "soft")
 
     return result
 
