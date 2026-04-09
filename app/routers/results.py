@@ -135,6 +135,7 @@ async def results_page(
                 "omsattning_sek": _öre_to_sek(company.omsattning),
                 "antal_anstallda": company.antal_anstallda,
                 "arets_resultat_ksek": _öre_to_ksek(company.arets_resultat),
+                "resultat_efter_finansnetto_ksek": _öre_to_ksek(company.resultat_efter_finansnetto),
                 "vinstmarginal": company.vinstmarginal,
                 "soliditet": company.soliditet,
                 "loner_ksek": _öre_to_ksek(company.loner_styrelse_vd),

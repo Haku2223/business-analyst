@@ -187,8 +187,8 @@ input[type=number]:focus, input[type=text]:focus { outline: none; border-color: 
       <div class="filter-row">
         <input type="checkbox" name="hard_profitability_enabled" {% if cfg.hard_profitability_enabled %}checked{% endif %} />
         <div>
-          <div class="filter-name">Current Profitability</div>
-          <div class="filter-desc">ÅRETS RESULTAT must be &gt; 0 (positive net result)</div>
+          <div class="filter-name">Resultat efter finansnetto</div>
+          <div class="filter-desc">RESULTAT EFTER FINANSNETTO must be &gt; 0 (falls back to ÅRETS RESULTAT if not available)</div>
         </div>
         <select name="filter_type_profitability" class="type-select {% if ft.get('profitability', 'hard') == 'hard' %}is-hard{% else %}is-soft{% endif %}" onchange="updateTypeStyle(this)">
           <option value="hard" {% if ft.get('profitability', 'hard') == 'hard' %}selected{% endif %}>Hard — exclude</option>

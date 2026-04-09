@@ -158,7 +158,7 @@
     <!-- Profitability -->
     <div class="fp-row">
       <input type="checkbox" id="fp-hard_profitability_enabled" {% if cfg.hard_profitability_enabled %}checked{% endif %} />
-      <label for="fp-hard_profitability_enabled">Profitability (Result &gt; 0)</label>
+      <label for="fp-hard_profitability_enabled">Resultat efter finansnetto &gt; 0</label>
       <select id="fp-filter_type_profitability" class="fp-type-select {% if ft.get('profitability','hard')=='hard' %}is-hard{% else %}is-soft{% endif %}" onchange="updateFpTypeStyle(this)">
         <option value="hard" {% if ft.get('profitability','hard')=='hard' %}selected{% endif %}>Hard — exclude</option>
         <option value="soft" {% if ft.get('profitability','hard')=='soft' %}selected{% endif %}>Soft — score</option>
@@ -271,7 +271,7 @@
           <th class="sort-header" data-col="age">Ålder</th>
           <th class="sort-header" data-col="revenue">Net. Omsättning</th>
           <th class="sort-header" data-col="employees">Emp.</th>
-          <th class="sort-header" data-col="net_result">Årets Resultat</th>
+          <th class="sort-header" data-col="net_result">Res. e. Finansnetto</th>
           <th class="sort-header" data-col="margin">Vinstmarginal</th>
           <th class="sort-header" data-col="soliditet">Sol. %</th>
           <th class="sort-header" data-col="owner_salary">Own. Sal.</th>
@@ -312,8 +312,9 @@
             {{ "%.1f"|format(row.omsattning_sek / 1000000) if row.omsattning_sek else '—' }} M
           </td>
           <td data-val="{{ row.antal_anstallda or 0 }}">{{ row.antal_anstallda or '—' }}</td>
-          <td data-val="{{ row.arets_resultat_ksek or 0 }}" style="{% if row.arets_resultat_ksek and row.arets_resultat_ksek > 0 %}color:#16a34a{% elif row.arets_resultat_ksek %}color:#dc2626{% endif %}">
-            {{ row.arets_resultat_ksek | int if row.arets_resultat_ksek else '—' }}
+          {% set res_val = row.resultat_efter_finansnetto_ksek if row.resultat_efter_finansnetto_ksek is not none else row.arets_resultat_ksek %}
+          <td data-val="{{ res_val or 0 }}" style="{% if res_val and res_val > 0 %}color:#16a34a{% elif res_val %}color:#dc2626{% endif %}">
+            {{ res_val | int if res_val else '—' }}
           </td>
           <td data-val="{{ row.vinstmarginal or 0 }}">{{ "%.1f"|format(row.vinstmarginal) if row.vinstmarginal else '—' }}%</td>
           <td data-val="{{ row.soliditet or 0 }}">{{ "%.1f"|format(row.soliditet) if row.soliditet else '—' }}%</td>

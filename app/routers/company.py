@@ -75,6 +75,62 @@ async def company_detail(request: Request, orgnr: str):
                     "soft_fails": ed.get("phase2a_soft_fails", []),
                 }
 
+        # Build display_financial: Phase 2 multi-year if available, otherwise Phase 1 single year.
+        # is_phase2 flag lets the template know which mode it's in.
+        phase1_data = None
+        display_financial: list = []
+        is_phase2 = bool(historical)
+        if company:
+            ex = company.extra_data or {}
+            phase1_data = {
+                "slutdatum": company.bokslutsperiod_slut,
+                # Löner & Utdelning
+                "loner_styrelse_vd": company.loner_styrelse_vd,
+                "loner_ovriga": ex.get("loner_ovriga"),
+                "foreslagen_utdelning": ex.get("foreslagen_utdelning"),
+                # Resultaträkning
+                "nettoomsattning": ex.get("nettoomsattning"),
+                "ovrig_omsattning": ex.get("ovrig_omsattning"),
+                "omsattning": company.omsattning,
+                "lagerforandring": ex.get("lagerforandringar"),
+                "rorelsekostnader": ex.get("rorelsekostnader"),
+                "rorelseresultat": company.rorelsresultat,
+                "finansiella_intakter": ex.get("finansiella_intakter"),
+                "finansiella_kostnader": ex.get("finansiella_kostnader"),
+                "ovriga_finansiella_kostnader": ex.get("ovriga_finansiella_kostnader"),
+                "resultat_efter_finansnetto": company.resultat_efter_finansnetto,
+                "resultat_fore_skatt": company.resultat_fore_skatt,
+                "skatt": ex.get("skatt_pa_arets_resultat"),
+                "arets_resultat": company.arets_resultat,
+                # Balansräkning — assets
+                "immateriella_anlaggningstillgangar": ex.get("immateriella_anlaggningstillgangar"),
+                "materiella_anlaggningstillgangar": ex.get("materiella_anlaggningstillgangar"),
+                "finansiella_anlaggningstillgangar": ex.get("finansiella_anlaggningstillgangar"),
+                "anlaggningstillgangar": ex.get("anlaggningstillgangar"),
+                "varulager": ex.get("varulager"),
+                "kundfordringar": ex.get("kundfordringar"),
+                "kassa_och_bank": company.kassa_och_bank,
+                "omsattningstillgangar": ex.get("omsattningstillgangar"),
+                "summa_tillgangar": company.summa_tillgangar,
+                # Balansräkning — equity & liabilities
+                "fritt_eget_kapital": ex.get("fritt_eget_kapital"),
+                "obeskattade_reserver": ex.get("obeskattade_reserver"),
+                "eget_kapital": company.eget_kapital,
+                "avsattningar": ex.get("avsattningar"),
+                "langfristiga_skulder": ex.get("langfristiga_skulder"),
+                "leverantorsskulder": ex.get("leverantorsskulder"),
+                "kortfristiga_skulder": ex.get("kortfristiga_skulder"),
+                "summa_eget_kapital_och_skulder": ex.get("summa_eget_kapital_och_skulder"),
+                # Nyckeltal
+                "vinstmarginal_pct": company.vinstmarginal,
+                "soliditet_pct": company.soliditet,
+                "kassalikviditet_pct": company.kassalikviditet,
+                "skuldsattningsgrad": company.skuldsattningsgrad,
+                "avkastning_eget_kapital_pct": ex.get("avkastning_eget_kapital"),
+                "avkastning_totalt_kapital_pct": ex.get("avkastning_totalt_kapital"),
+            }
+            display_financial = historical if historical else [phase1_data]
+
         return templates.TemplateResponse(
             "company.html",
             {
@@ -86,6 +142,9 @@ async def company_detail(request: Request, orgnr: str):
                 "events": events,
                 "historical": historical or [],
                 "phase2a_results": phase2a_results,
+                "phase1_data": phase1_data,
+                "display_financial": display_financial,
+                "is_phase2": is_phase2,
             },
         )
 

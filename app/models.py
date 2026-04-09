@@ -71,6 +71,7 @@ class Company(Base):
     loner_styrelse_vd: Mapped[int | None] = mapped_column(BigInteger)
     resultat_fore_skatt: Mapped[int | None] = mapped_column(BigInteger)
     rorelsresultat: Mapped[int | None] = mapped_column(BigInteger)
+    resultat_efter_finansnetto: Mapped[int | None] = mapped_column(BigInteger)
 
     # Percentage/ratio fields
     vinstmarginal: Mapped[float | None] = mapped_column(Float)
