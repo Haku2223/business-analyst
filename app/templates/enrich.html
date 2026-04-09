@@ -31,9 +31,22 @@
   .filter-section { margin-top: 24px; }
   .filter-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .filter-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #f9fafb; border: 1px solid var(--border); border-radius: var(--radius); }
-  .filter-item label { font-size: 13px; flex: 1; }
-  .filter-item input[type="number"] { width: 70px; padding: 4px 6px; font-size: 13px; border: 1px solid var(--border); border-radius: 4px; }
+  .filter-item label { font-size: 13px; flex: 1; min-width: 0; }
+  .filter-item input[type="number"] { width: 70px; padding: 4px 6px; font-size: 13px; border: 1px solid var(--border); border-radius: 4px; flex-shrink: 0; }
   .filter-item input[type="checkbox"] { width: 16px; height: 16px; flex-shrink: 0; }
+  .type-select {
+    padding: 4px 6px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid #d1d5db;
+    width: 110px;
+    flex-shrink: 0;
+  }
+  .type-select.is-hard { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+  .type-select.is-soft { background: #fef9c3; color: #713f12; border-color: #fde68a; }
+  .type-placeholder { width: 110px; flex-shrink: 0; }
 
   .batch-select { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
   .batch-select select { max-width: 400px; }
@@ -145,40 +158,66 @@
       These filters are applied to historical financial data after scraping.
       Hard filters exclude companies; soft filters add warning flags.
     </p>
+    <div style="font-size:12px;color:#6b7280;margin-bottom:10px;display:flex;gap:16px;align-items:center">
+      <span><span style="background:#fee2e2;color:#991b1b;font-size:11px;padding:2px 8px;border-radius:999px;font-weight:600">Hard</span> — company is <strong>excluded</strong> if it fails</span>
+      <span><span style="background:#fef9c3;color:#713f12;font-size:11px;padding:2px 8px;border-radius:999px;font-weight:600">Soft</span> — company gets <strong>warning flag</strong> if it fails</span>
+    </div>
     <div class="filter-grid">
-      <!-- Hard: Profitability 3/5 -->
+      <!-- Profitability N/5 -->
       <div class="filter-item">
         <input type="checkbox" id="cfgProfit3of5" checked>
-        <label>Profitable in N of last 5 years (Hard)</label>
+        <label>Profitable in N of last 5 years</label>
+        <select id="cfgProfit3of5Type" class="type-select is-hard" onchange="updateTypeStyle(this)">
+          <option value="hard" selected>Hard — exclude</option>
+          <option value="soft">Soft — flag</option>
+        </select>
         <input type="number" id="cfgProfitMinYears" value="3" min="1" max="5">
       </div>
-      <!-- Hard: Revenue decline -->
+      <!-- Revenue decline -->
       <div class="filter-item">
         <input type="checkbox" id="cfgRevDecline" checked>
-        <label>Max revenue decline % (2yr, Hard)</label>
+        <label>Max revenue decline % (2yr)</label>
+        <select id="cfgRevDeclineType" class="type-select is-hard" onchange="updateTypeStyle(this)">
+          <option value="hard" selected>Hard — exclude</option>
+          <option value="soft">Soft — flag</option>
+        </select>
         <input type="number" id="cfgRevDeclineMax" value="15" min="0" max="100" step="1">
       </div>
-      <!-- Soft: Employee trend -->
+      <!-- Employee trend -->
       <div class="filter-item">
         <input type="checkbox" id="cfgEmpTrend" checked>
-        <label>Max employee shrink % (5yr, Soft)</label>
+        <label>Max employee shrink % (5yr)</label>
+        <select id="cfgEmpTrendType" class="type-select is-soft" onchange="updateTypeStyle(this)">
+          <option value="hard">Hard — exclude</option>
+          <option value="soft" selected>Soft — flag</option>
+        </select>
         <input type="number" id="cfgEmpShrinkMax" value="40" min="0" max="100" step="1">
       </div>
-      <!-- Soft: Revenue CAGR -->
+      <!-- Revenue CAGR -->
       <div class="filter-item">
         <input type="checkbox" id="cfgRevCAGR" checked>
-        <label>Min revenue CAGR % (5yr, Soft)</label>
+        <label>Min revenue CAGR % (5yr)</label>
+        <select id="cfgRevCAGRType" class="type-select is-soft" onchange="updateTypeStyle(this)">
+          <option value="hard">Hard — exclude</option>
+          <option value="soft" selected>Soft — flag</option>
+        </select>
         <input type="number" id="cfgRevCAGRMin" value="-5" min="-100" max="100" step="1">
       </div>
-      <!-- Soft: Consistent margin -->
+      <!-- Consistent margin -->
       <div class="filter-item">
         <input type="checkbox" id="cfgMarginConsist" checked>
-        <label>Margin >N% in M of 5 years (Soft)</label>
+        <label>Margin &gt;N% in M of 5 years</label>
+        <select id="cfgMarginConsistType" class="type-select is-soft" onchange="updateTypeStyle(this)">
+          <option value="hard">Hard — exclude</option>
+          <option value="soft" selected>Soft — flag</option>
+        </select>
         <input type="number" id="cfgMarginMin" value="5" min="0" max="100" step="1">
       </div>
+      <!-- Min years above threshold (sub-parameter, no type selector) -->
       <div class="filter-item">
         <input type="checkbox" disabled checked>
         <label>Min years above margin threshold</label>
+        <div class="type-placeholder"></div>
         <input type="number" id="cfgMarginMinYears" value="3" min="1" max="5">
       </div>
     </div>
@@ -249,6 +288,11 @@
 let currentJobId = null;
 let pollInterval = null;
 
+function updateTypeStyle(sel) {
+  sel.classList.remove('is-hard', 'is-soft');
+  sel.classList.add(sel.value === 'hard' ? 'is-hard' : 'is-soft');
+}
+
 function getFilterConfig() {
   return {
     p2a_hard_profitability_3of5_enabled: document.getElementById('cfgProfit3of5').checked,
@@ -262,6 +306,13 @@ function getFilterConfig() {
     p2a_soft_margin_consistency_enabled: document.getElementById('cfgMarginConsist').checked,
     p2a_soft_margin_min_pct: parseFloat(document.getElementById('cfgMarginMin').value) || 5,
     p2a_soft_margin_min_years: parseInt(document.getElementById('cfgMarginMinYears').value) || 3,
+    p2a_filter_types: {
+      profitability_3of5: document.getElementById('cfgProfit3of5Type').value,
+      revenue_decline: document.getElementById('cfgRevDeclineType').value,
+      employee_trend: document.getElementById('cfgEmpTrendType').value,
+      revenue_cagr: document.getElementById('cfgRevCAGRType').value,
+      consistent_margin: document.getElementById('cfgMarginConsistType').value,
+    },
   };
 }
 
