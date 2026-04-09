@@ -143,6 +143,17 @@ async def filter_page(request: Request, load_preset: int = None):
     cfg = get_active_config()
 
     async for db in get_db():
+        # On cold start (in-memory empty), restore active config from DB
+        if not _ACTIVE_FILTER_CONFIG:
+            active_result = await db.execute(
+                select(FilterPreset).where(FilterPreset.name == "__active__")
+            )
+            active_row = active_result.scalars().first()
+            if active_row:
+                cfg = DEFAULT_FILTER_CONFIG.copy()
+                cfg.update(active_row.config_json)
+                set_active_config(cfg)
+
         # Load preset if requested
         if load_preset:
             preset = await db.get(FilterPreset, load_preset)
@@ -152,7 +163,11 @@ async def filter_page(request: Request, load_preset: int = None):
                 set_active_config(cfg)
 
         # Load all presets for the dropdown
-        result = await db.execute(select(FilterPreset).order_by(FilterPreset.created_at.desc()))
+        result = await db.execute(
+            select(FilterPreset)
+            .where(FilterPreset.name != "__active__")
+            .order_by(FilterPreset.created_at.desc())
+        )
         presets = result.scalars().all()
 
         return templates.TemplateResponse(
@@ -184,14 +199,28 @@ async def filter_post(request: Request):
     set_active_config(cfg)
 
     async for db in get_db():
+        # Always persist active config to DB so it survives server restarts
+        active_result = await db.execute(
+            select(FilterPreset).where(FilterPreset.name == "__active__")
+        )
+        active_row = active_result.scalars().first()
+        if active_row:
+            active_row.config_json = cfg
+        else:
+            db.add(FilterPreset(name="__active__", config_json=cfg, created_by="__system__"))
+        await db.flush()
+
         presets_result = await db.execute(
-            select(FilterPreset).order_by(FilterPreset.created_at.desc())
+            select(FilterPreset)
+            .where(FilterPreset.name != "__active__")
+            .order_by(FilterPreset.created_at.desc())
         )
         presets = presets_result.scalars().all()
 
         if action == "save_preset":
             preset_name = str(form_dict.get("preset_name", "")).strip()
             if not preset_name:
+                await db.commit()
                 return templates.TemplateResponse(
                     "filter.html",
                     {
@@ -214,7 +243,9 @@ async def filter_post(request: Request):
 
             # Reload presets
             presets_result = await db.execute(
-                select(FilterPreset).order_by(FilterPreset.created_at.desc())
+                select(FilterPreset)
+                .where(FilterPreset.name != "__active__")
+                .order_by(FilterPreset.created_at.desc())
             )
             presets = presets_result.scalars().all()
 
