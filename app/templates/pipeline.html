@@ -2,16 +2,587 @@
 {% block title %}Pipeline{% endblock %}
 {% block topbar_title %}Kanban Pipeline{% endblock %}
 
+{% block topbar_right %}
+<span class="text-muted" style="font-size:12px">{{ total_cards }} compan{{ 'y' if total_cards == 1 else 'ies' }}</span>
+{% endblock %}
+
+{% block head %}
+<style>
+  /* ------------------------------------------------------------------ */
+  /* List toggle tabs                                                      */
+  /* ------------------------------------------------------------------ */
+  .kanban-controls {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+
+  .list-tabs {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    flex: 1;
+  }
+
+  .list-tab {
+    padding: 6px 14px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: #fff;
+    color: var(--text);
+    cursor: pointer;
+    font-size: 13px;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background .15s, color .15s, border-color .15s;
+  }
+  .list-tab:hover { background: #f3f4f6; }
+  .list-tab.active {
+    background: var(--primary);
+    color: #fff;
+    border-color: var(--primary);
+  }
+
+  .show-all-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--muted);
+    cursor: pointer;
+    white-space: nowrap;
+    padding: 6px 0;
+    user-select: none;
+  }
+  .show-all-label input { cursor: pointer; }
+
+  /* ------------------------------------------------------------------ */
+  /* Kanban board grid                                                     */
+  /* ------------------------------------------------------------------ */
+  .kanban-board {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    align-items: start;
+  }
+  @media (max-width: 1100px) { .kanban-board { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 640px)  { .kanban-board { grid-template-columns: 1fr; } }
+
+  /* ------------------------------------------------------------------ */
+  /* Column                                                                */
+  /* ------------------------------------------------------------------ */
+  .kanban-col {
+    background: #f3f4f6;
+    border-radius: 8px;
+    padding: 10px;
+    min-height: 180px;
+    transition: background .15s;
+  }
+  .kanban-col.drag-over { background: #e5e7eb; outline: 2px dashed var(--primary); outline-offset: -2px; }
+
+  .kanban-col-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 3px solid transparent;
+  }
+  .col-unreviewed .kanban-col-header { border-bottom-color: #9ca3af; }
+  .col-watch      .kanban-col-header { border-bottom-color: var(--watch); }
+  .col-deep-dive  .kanban-col-header { border-bottom-color: var(--deep-dive); }
+  .col-pass       .kanban-col-header { border-bottom-color: var(--pass-col); }
+
+  .col-title {
+    font-weight: 700;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .col-dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  }
+  .col-unreviewed .col-dot { background: #9ca3af; }
+  .col-watch      .col-dot { background: var(--watch); }
+  .col-deep-dive  .col-dot { background: var(--deep-dive); }
+  .col-pass       .col-dot { background: var(--pass-col); }
+
+  .col-count {
+    font-size: 11px;
+    color: var(--muted);
+    background: #fff;
+    padding: 1px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    font-weight: 600;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Card list drop zone                                                   */
+  /* ------------------------------------------------------------------ */
+  .card-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 60px;
+  }
+
+  .empty-col {
+    text-align: center;
+    color: #9ca3af;
+    font-size: 12px;
+    padding: 28px 0;
+    pointer-events: none;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Kanban card                                                           */
+  /* ------------------------------------------------------------------ */
+  .kanban-card {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 11px 12px;
+    cursor: grab;
+    box-shadow: 0 1px 2px rgba(0,0,0,.06);
+    transition: box-shadow .15s, transform .1s;
+    position: relative;
+    user-select: none;
+  }
+  .kanban-card:hover { box-shadow: 0 4px 10px rgba(0,0,0,.1); }
+  .kanban-card.dragging { opacity: .45; cursor: grabbing; box-shadow: none; }
+
+  .card-name {
+    font-weight: 600;
+    font-size: 13px;
+    margin-bottom: 2px;
+    padding-right: 22px; /* space for badge */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .card-name a { color: var(--text); text-decoration: none; }
+  .card-name a:hover { color: var(--primary); text-decoration: underline; }
+
+  .card-location {
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .card-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    margin-bottom: 6px;
+  }
+  .card-stat {
+    font-size: 11px;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+  .card-stat-lbl { color: var(--muted); }
+
+  .card-desc {
+    font-size: 11px;
+    color: var(--muted);
+    font-style: italic;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 4px;
+    border-top: 1px solid var(--border);
+    padding-top: 5px;
+  }
+
+  /* Phase 2 pill */
+  .card-p2 {
+    display: inline-block;
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    margin-top: 4px;
+    font-weight: 600;
+  }
+  .p2-complete { background: #dcfce7; color: #166534; }
+  .p2-running  { background: #dbeafe; color: #1e40af; }
+  .p2-failed   { background: #fee2e2; color: #991b1b; }
+  .p2-none     { background: #f3f4f6; color: #6b7280; }
+
+  /* ------------------------------------------------------------------ */
+  /* Lists badge + tooltip                                                 */
+  /* ------------------------------------------------------------------ */
+  .lists-badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    font-size: 9px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: help;
+    flex-shrink: 0;
+  }
+  .lists-badge-multi { background: var(--primary); color: #fff; }
+  .lists-badge-single { background: #e5e7eb; color: #6b7280; }
+
+  /* Tooltip wrapper */
+  .badge-wrap { position: absolute; top: 8px; right: 8px; }
+  .badge-tooltip {
+    display: none;
+    position: absolute;
+    top: calc(100% + 5px);
+    right: 0;
+    background: #1a1f2e;
+    color: #e5e7eb;
+    padding: 7px 10px;
+    border-radius: var(--radius);
+    font-size: 11px;
+    line-height: 1.65;
+    white-space: nowrap;
+    z-index: 200;
+    box-shadow: 0 4px 16px rgba(0,0,0,.25);
+    pointer-events: none;
+    min-width: 130px;
+  }
+  .badge-tooltip::before {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    right: 6px;
+    border: 5px solid transparent;
+    border-bottom-color: #1a1f2e;
+  }
+  .badge-wrap:hover .badge-tooltip { display: block; }
+
+  /* ------------------------------------------------------------------ */
+  /* Drag hint                                                             */
+  /* ------------------------------------------------------------------ */
+  .drag-hint {
+    font-size: 12px;
+    color: var(--muted);
+    text-align: right;
+    margin-bottom: 12px;
+  }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="card" style="max-width:700px;margin:0 auto">
-  <div class="card-body" style="text-align:center;padding:48px">
-    <div style="font-size:40px;margin-bottom:12px">▦</div>
-    <h2 style="font-weight:600;margin-bottom:8px">Kanban Board — Coming Soon</h2>
-    <p class="text-muted" style="margin-bottom:20px">
-      The drag-and-drop Kanban pipeline board will be built in a later phase.
-      You can already update pipeline status from the Results page.
-    </p>
-    <a href="/results" class="btn btn-primary">View Results</a>
+
+{# ===================================================================== #}
+{# Card macro — must be defined inside a block to be accessible           #}
+{# ===================================================================== #}
+{% macro _card(card) %}
+<div class="kanban-card"
+     draggable="true"
+     data-orgnr="{{ card.orgnr }}"
+     data-status="{{ card.pipeline_status }}"
+     ondragstart="onDragStart(event)"
+     ondragend="onDragEnd(event)">
+
+  {# Company name + detail link #}
+  <div class="card-name">
+    <a href="/company/{{ card.orgnr }}" onclick="event.stopPropagation()">
+      {{ card.bolagsnamn }}
+    </a>
   </div>
+
+  {# City / County #}
+  {% if card.ort or card.lan %}
+  <div class="card-location">
+    {{ card.ort }}{% if card.ort and card.lan %} · {% endif %}{{ card.lan }}
+  </div>
+  {% endif %}
+
+  {# Key stats #}
+  <div class="card-stats">
+    {% if card.omsattning_msek is not none %}
+    <div class="card-stat">
+      <span class="card-stat-lbl">Rev&nbsp;</span>
+      <strong>{{ "%.1f"|format(card.omsattning_msek) }} M</strong>
+    </div>
+    {% endif %}
+    {% if card.antal_anstallda is not none %}
+    <div class="card-stat">
+      <span class="card-stat-lbl">Emp&nbsp;</span>
+      <strong>{{ card.antal_anstallda }}</strong>
+    </div>
+    {% endif %}
+    {% if card.vinstmarginal is not none %}
+    <div class="card-stat">
+      <span class="card-stat-lbl">Margin&nbsp;</span>
+      <strong>{{ "%.1f"|format(card.vinstmarginal) }}%</strong>
+    </div>
+    {% endif %}
+    {% if card.soliditet is not none %}
+    <div class="card-stat">
+      <span class="card-stat-lbl">Sol&nbsp;</span>
+      <strong>{{ "%.1f"|format(card.soliditet) }}%</strong>
+    </div>
+    {% endif %}
+  </div>
+
+  {# AI description #}
+  {% if card.ai_description %}
+  <div class="card-desc">{{ card.ai_description }}</div>
+  {% endif %}
+
+  {# Lists badge / tooltip — only shown when company is in at least 1 list #}
+  {% if card.batch_names %}
+  <div class="badge-wrap">
+    <div class="lists-badge {% if card.batch_names | length > 1 %}lists-badge-multi{% else %}lists-badge-single{% endif %}">
+      {{ card.batch_names | length }}
+    </div>
+    <div class="badge-tooltip">
+      {% if card.batch_names | length == 1 %}
+      List: {{ card.batch_names[0] }}
+      {% else %}
+      In {{ card.batch_names | length }} lists:<br>
+      {% for name in card.batch_names %}• {{ name }}<br>{% endfor %}
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
 </div>
+{% endmacro %}
+
+<!-- ================================================================== -->
+<!-- List toggle                                                          -->
+<!-- ================================================================== -->
+<div class="kanban-controls">
+  <div class="list-tabs">
+    <a href="/pipeline" class="list-tab {% if batch_id is none %}active{% endif %}">
+      All Lists
+    </a>
+    {% for batch in all_batches %}
+    <a href="/pipeline?batch_id={{ batch.id }}"
+       class="list-tab {% if batch_id == batch.id %}active{% endif %}"
+       title="{{ batch.filename }}">
+      {{ batch.list_name or batch.filename | truncate(22, True, '…') }}
+    </a>
+    {% endfor %}
+  </div>
+
+  {% if batch_id is not none %}
+  <label class="show-all-label">
+    <input type="checkbox" id="showAllChk" {% if show_all %}checked{% endif %}
+           onchange="toggleShowAll(this)">
+    Show all companies in list
+  </label>
+  {% endif %}
+</div>
+
+{% if not all_batches %}
+<div class="alert alert-info">
+  No lists uploaded yet. <a href="/upload">Upload a list</a> to get started.
+</div>
+{% else %}
+
+<!-- ================================================================== -->
+<!-- Board                                                                -->
+<!-- ================================================================== -->
+<p class="drag-hint">Drag cards between columns to update pipeline status</p>
+
+<div class="kanban-board" id="kanbanBoard">
+
+  <!-- UNREVIEWED -->
+  <div class="kanban-col col-unreviewed"
+       data-status="unreviewed"
+       ondragover="onDragOver(event)"
+       ondragleave="onDragLeave(event)"
+       ondrop="onDrop(event)">
+    <div class="kanban-col-header">
+      <span class="col-title"><span class="col-dot"></span>Unreviewed</span>
+      <span class="col-count" id="count-unreviewed">{{ columns.unreviewed | length }}</span>
+    </div>
+    <div class="card-list" id="col-unreviewed" data-status="unreviewed">
+      {% for card in columns.unreviewed %}{{ _card(card) }}{% endfor %}
+      {% if not columns.unreviewed %}<div class="empty-col">No companies</div>{% endif %}
+    </div>
+  </div>
+
+  <!-- WATCH -->
+  <div class="kanban-col col-watch"
+       data-status="watch"
+       ondragover="onDragOver(event)"
+       ondragleave="onDragLeave(event)"
+       ondrop="onDrop(event)">
+    <div class="kanban-col-header">
+      <span class="col-title"><span class="col-dot"></span>Watch</span>
+      <span class="col-count" id="count-watch">{{ columns.watch | length }}</span>
+    </div>
+    <div class="card-list" id="col-watch" data-status="watch">
+      {% for card in columns.watch %}{{ _card(card) }}{% endfor %}
+      {% if not columns.watch %}<div class="empty-col">No companies</div>{% endif %}
+    </div>
+  </div>
+
+  <!-- DEEP DIVE -->
+  <div class="kanban-col col-deep-dive"
+       data-status="deep_dive"
+       ondragover="onDragOver(event)"
+       ondragleave="onDragLeave(event)"
+       ondrop="onDrop(event)">
+    <div class="kanban-col-header">
+      <span class="col-title"><span class="col-dot"></span>Deep Dive</span>
+      <span class="col-count" id="count-deep_dive">{{ columns.deep_dive | length }}</span>
+    </div>
+    <div class="card-list" id="col-deep_dive" data-status="deep_dive">
+      {% for card in columns.deep_dive %}{{ _card(card) }}{% endfor %}
+      {% if not columns.deep_dive %}<div class="empty-col">No companies</div>{% endif %}
+    </div>
+  </div>
+
+  <!-- PASS -->
+  <div class="kanban-col col-pass"
+       data-status="pass"
+       ondragover="onDragOver(event)"
+       ondragleave="onDragLeave(event)"
+       ondrop="onDrop(event)">
+    <div class="kanban-col-header">
+      <span class="col-title"><span class="col-dot"></span>Pass</span>
+      <span class="col-count" id="count-pass">{{ columns.pass | length }}</span>
+    </div>
+    <div class="card-list" id="col-pass" data-status="pass">
+      {% for card in columns.pass %}{{ _card(card) }}{% endfor %}
+      {% if not columns.pass %}<div class="empty-col">No companies</div>{% endif %}
+    </div>
+  </div>
+
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* ------------------------------------------------------------------ */
+/* Drag-and-drop state                                                   */
+/* ------------------------------------------------------------------ */
+let _dragged = null;   // the DOM element being dragged
+let _dragOrgnr = null;
+let _dragOldStatus = null;
+
+function onDragStart(e) {
+  _dragged = e.currentTarget;
+  _dragOrgnr = _dragged.dataset.orgnr;
+  _dragOldStatus = _dragged.dataset.status;
+  _dragged.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', _dragOrgnr);
+}
+
+function onDragEnd(e) {
+  if (_dragged) { _dragged.classList.remove('dragging'); _dragged = null; }
+  document.querySelectorAll('.kanban-col').forEach(c => c.classList.remove('drag-over'));
+}
+
+function onDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  e.currentTarget.classList.add('drag-over');
+}
+
+function onDragLeave(e) {
+  const col = e.currentTarget;
+  if (!col.contains(e.relatedTarget)) col.classList.remove('drag-over');
+}
+
+async function onDrop(e) {
+  e.preventDefault();
+  const col = e.currentTarget;
+  col.classList.remove('drag-over');
+
+  const newStatus = col.dataset.status;
+  if (!_dragged || newStatus === _dragOldStatus) return;
+
+  const orgnr = _dragOrgnr;
+  const oldStatus = _dragOldStatus;
+  const card = _dragged;
+
+  /* -- Optimistic UI update -- */
+  const targetList = document.getElementById('col-' + newStatus);
+  _removeEmpty(targetList);
+  targetList.appendChild(card);
+  card.dataset.status = newStatus;
+  _updateCount(oldStatus);
+  _updateCount(newStatus);
+  _checkEmpty(oldStatus);
+
+  /* -- API call -- */
+  try {
+    const resp = await fetch('/api/pipeline/status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orgnr, status: newStatus }),
+    });
+    if (!resp.ok) throw new Error('Server error');
+    showFlash('Moved to ' + _statusLabel(newStatus), 'success');
+  } catch (err) {
+    /* Revert on failure */
+    showFlash('Failed to update status — reverting', 'danger');
+    const origList = document.getElementById('col-' + oldStatus);
+    if (origList) {
+      _removeEmpty(origList);
+      origList.appendChild(card);
+      card.dataset.status = oldStatus;
+      _updateCount(oldStatus);
+      _updateCount(newStatus);
+      _checkEmpty(newStatus);
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Helpers                                                               */
+/* ------------------------------------------------------------------ */
+function _updateCount(status) {
+  const list = document.getElementById('col-' + status);
+  const el   = document.getElementById('count-' + status);
+  if (list && el) el.textContent = list.querySelectorAll('.kanban-card').length;
+}
+
+function _checkEmpty(status) {
+  const list = document.getElementById('col-' + status);
+  if (!list) return;
+  if (list.querySelectorAll('.kanban-card').length === 0 && !list.querySelector('.empty-col')) {
+    const d = document.createElement('div');
+    d.className = 'empty-col';
+    d.textContent = 'No companies';
+    list.appendChild(d);
+  }
+}
+
+function _removeEmpty(list) {
+  const emp = list.querySelector('.empty-col');
+  if (emp) emp.remove();
+}
+
+function _statusLabel(s) {
+  return { unreviewed: 'Unreviewed', watch: 'Watch', deep_dive: 'Deep Dive', pass: 'Pass' }[s] || s;
+}
+
+/* ------------------------------------------------------------------ */
+/* Show-all toggle                                                        */
+/* ------------------------------------------------------------------ */
+function toggleShowAll(chk) {
+  const url = new URL(window.location.href);
+  if (chk.checked) url.searchParams.set('show_all', 'true');
+  else url.searchParams.delete('show_all');
+  window.location.href = url.toString();
+}
+</script>
 {% endblock %}
