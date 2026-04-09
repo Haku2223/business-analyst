@@ -235,6 +235,26 @@
   </div>
 </div>
 
+<!-- Current batch info -->
+{% if current_batch %}
+<div style="margin-bottom:12px;padding:10px 14px;background:#f8f9fb;border:1px solid #e5e7eb;border-radius:8px;display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap">
+  <div style="flex:1;min-width:200px">
+    <div style="font-weight:600;font-size:14px;color:#1a1f2e">
+      {{ current_batch.list_name or current_batch.filename }}
+    </div>
+    {% if current_batch.list_name %}
+    <div style="font-size:12px;color:#6b7280;margin-top:1px">{{ current_batch.filename }}</div>
+    {% endif %}
+    {% if current_batch.list_description %}
+    <div style="font-size:13px;color:#374151;margin-top:6px;white-space:pre-wrap">{{ current_batch.list_description }}</div>
+    {% endif %}
+  </div>
+  <div style="font-size:12px;color:#9ca3af;white-space:nowrap;padding-top:2px">
+    Uploaded {{ current_batch.upload_timestamp.strftime('%d %b %Y %H:%M') }}
+  </div>
+</div>
+{% endif %}
+
 <!-- Filter bar -->
 <div class="filter-bar">
   <input type="text" id="search-input" placeholder="Search company name, orgnr…" style="width:240px" />
@@ -248,11 +268,13 @@
   <select id="batch-filter">
     <option value="">All batches</option>
     {% for b in all_batches %}
-    <option value="{{ b.id }}" {% if batch_id == b.id %}selected{% endif %}>{{ b.filename }} ({{ b.upload_timestamp.strftime('%d %b %Y') }})</option>
+    <option value="{{ b.id }}" {% if batch_id == b.id %}selected{% endif %}>
+      {%- if b.list_name %}{{ b.list_name }}{% else %}{{ b.filename }}{% endif %} ({{ b.upload_timestamp.strftime('%d %b %Y') }})
+    </option>
     {% endfor %}
   </select>
   <label style="display:flex;align-items:center;gap:6px;font-size:13px">
-    <input type="checkbox" id="show-passed-only" checked /> Phase 1 passed only
+    <input type="checkbox" id="show-passed-only" {% if not show_all %}checked{% endif %} /> Phase 1 passed only
   </label>
   <span id="result-count" style="margin-left:auto;font-size:13px;color:#6b7280"></span>
 </div>
@@ -360,22 +382,23 @@
 </div>
 
 <!-- Pagination -->
+{% macro page_url(p) %}?page={{ p }}{% if batch_id %}&batch_id={{ batch_id }}{% endif %}{% if phase1_filter != 'passed' %}&phase1_filter={{ phase1_filter }}{% endif %}{% endmacro %}
 {% if total_pages > 1 %}
 <div class="pagination">
   {% if page > 1 %}
-  <a href="?page={{ page - 1 }}{% if batch_id %}&batch_id={{ batch_id }}{% endif %}" class="page-btn">‹ Prev</a>
+  <a href="{{ page_url(page - 1) }}" class="page-btn">‹ Prev</a>
   {% endif %}
   {% for p in range(1, total_pages + 1) %}
     {% if p == page %}
     <span class="page-btn active">{{ p }}</span>
     {% elif p <= 3 or p >= total_pages - 2 or (p >= page - 2 and p <= page + 2) %}
-    <a href="?page={{ p }}{% if batch_id %}&batch_id={{ batch_id }}{% endif %}" class="page-btn">{{ p }}</a>
+    <a href="{{ page_url(p) }}" class="page-btn">{{ p }}</a>
     {% elif p == 4 or p == total_pages - 3 %}
     <span class="page-btn" style="border:none;cursor:default">…</span>
     {% endif %}
   {% endfor %}
   {% if page < total_pages %}
-  <a href="?page={{ page + 1 }}{% if batch_id %}&batch_id={{ batch_id }}{% endif %}" class="page-btn">Next ›</a>
+  <a href="{{ page_url(page + 1) }}" class="page-btn">Next ›</a>
   {% endif %}
 </div>
 {% endif %}
@@ -394,21 +417,15 @@ const resultCount = document.getElementById('result-count');
 function applyFilters() {
   const search = searchInput.value.toLowerCase();
   const status = statusFilter.value;
-  const batch = batchFilter.value;
-  const passedOnly = passedOnlyCheck.checked;
   let visible = 0;
   Array.from(tbody.querySelectorAll('tr')).forEach(tr => {
     const name = (tr.dataset.name || '').toLowerCase();
     const orgnr = (tr.dataset.orgnr || '').toLowerCase();
     const rowStatus = tr.dataset.status || '';
-    const rowBatch = tr.dataset.batch || '';
-    const passed = tr.dataset.passed === '1';
 
     let show = true;
     if (search && !name.includes(search) && !orgnr.includes(search)) show = false;
     if (status && rowStatus !== status) show = false;
-    if (batch && rowBatch !== batch) show = false;
-    if (passedOnly && !passed) show = false;
     tr.style.display = show ? '' : 'none';
     if (show) visible++;
   });
@@ -417,8 +434,30 @@ function applyFilters() {
 
 searchInput.addEventListener('input', applyFilters);
 statusFilter.addEventListener('change', applyFilters);
-batchFilter.addEventListener('change', applyFilters);
-passedOnlyCheck.addEventListener('change', applyFilters);
+
+// Batch switching: full page reload so server loads the correct batch's filter config
+batchFilter.addEventListener('change', function() {
+  const url = new URL(window.location);
+  const batchId = this.value;
+  if (batchId) {
+    url.searchParams.set('batch_id', batchId);
+  } else {
+    url.searchParams.delete('batch_id');
+  }
+  url.searchParams.delete('page');
+  url.searchParams.delete('uploaded');
+  url.searchParams.delete('passed');
+  window.location.href = url.toString();
+});
+
+// Phase 1 filter toggle: full page reload so server applies the correct server-side filter
+passedOnlyCheck.addEventListener('change', function() {
+  const url = new URL(window.location);
+  url.searchParams.set('phase1_filter', this.checked ? 'passed' : 'all');
+  url.searchParams.delete('page');
+  window.location.href = url.toString();
+});
+
 applyFilters();
 
 // Column sorting

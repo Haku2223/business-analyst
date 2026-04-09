@@ -77,12 +77,14 @@ async def results_page(
     page: int = 1,
     uploaded: int = None,
     passed: int = None,
+    phase1_filter: str = "passed",
 ):
     """Render Phase 1 results table."""
     if not check_auth_redirect(request):
         return RedirectResponse("/login", status_code=302)
 
     display_name = get_display_name(request)
+    show_all = phase1_filter == "all"
 
     async for db in get_db():
         # Load all batches for the filter dropdown
@@ -103,6 +105,8 @@ async def results_page(
         )
         if batch_id:
             query = query.where(BatchCompany.batch_id == batch_id)
+        if not show_all:
+            query = query.where(BatchCompany.phase1_passed == True)  # noqa: E712
 
         result = await db.execute(query)
         pairs = result.all()
@@ -157,13 +161,24 @@ async def results_page(
             }
             rows.append(row)
 
-        # Sort rows: passed companies first, then failed — so pagination
-        # groups all passed companies on the earliest pages.
-        rows.sort(key=lambda r: (not r["phase1_passed"], r.get("orgnr", "")))
+        # Always sort by orgnr for consistent pagination
+        rows.sort(key=lambda r: r.get("orgnr", ""))
 
-        # Pagination
-        total_count = uploaded or len(rows)
-        passed_count = passed or sum(1 for r in rows if r["phase1_passed"])
+        # Always fetch true totals from the batch record so stats are accurate
+        # regardless of which phase1_filter view is active.
+        if uploaded is not None:
+            total_count = uploaded
+        elif current_batch and current_batch.row_count_uploaded:
+            total_count = current_batch.row_count_uploaded
+        else:
+            total_count = len(rows)
+
+        if passed is not None:
+            passed_count = passed
+        elif current_batch and current_batch.row_count_phase1 is not None:
+            passed_count = current_batch.row_count_phase1
+        else:
+            passed_count = sum(1 for r in rows if r["phase1_passed"])
         total_pages = max(1, (len(rows) + PAGE_SIZE - 1) // PAGE_SIZE)
         page = max(1, min(page, total_pages))
         offset = (page - 1) * PAGE_SIZE
@@ -179,6 +194,7 @@ async def results_page(
         # Load the batch's filter config for the inline filter panel
         batch_filter_cfg = DEFAULT_FILTER_CONFIG.copy()
         batch_filter_cfg["filter_types"] = DEFAULT_FILTER_CONFIG["filter_types"].copy()
+        current_batch = None
         if batch_id:
             current_batch = await db.get(Batch, batch_id)
             if current_batch and current_batch.filter_config_json:
@@ -209,9 +225,12 @@ async def results_page(
                 "total_pages": total_pages,
                 "batch_id": batch_id,
                 "all_batches": all_batches,
+                "current_batch": current_batch,
                 "message": message,
                 "cfg": batch_filter_cfg,
                 "presets": presets,
+                "show_all": show_all,
+                "phase1_filter": phase1_filter,
             },
         )
 

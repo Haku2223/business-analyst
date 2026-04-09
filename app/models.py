@@ -133,6 +133,8 @@ class Batch(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     filename: Mapped[str] = mapped_column(String(255))
+    list_name: Mapped[str | None] = mapped_column(String(255))
+    list_description: Mapped[str | None] = mapped_column(Text)
     upload_timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     filter_config_json: Mapped[dict | None] = mapped_column(JSON)
     row_count_uploaded: Mapped[int] = mapped_column(Integer, default=0)

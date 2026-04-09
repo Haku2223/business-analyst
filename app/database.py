@@ -72,6 +72,8 @@ async def _migrate_add_columns(conn) -> None:
     # List of (table, column, column_def) tuples to ensure exist
     new_columns = [
         ("companies", "resultat_efter_finansnetto", "BIGINT"),
+        ("batches", "list_name", "VARCHAR(255)"),
+        ("batches", "list_description", "TEXT"),
     ]
 
     settings = get_settings()
