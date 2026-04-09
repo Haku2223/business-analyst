@@ -164,8 +164,13 @@ async def results_page(
         # Always sort by orgnr for consistent pagination
         rows.sort(key=lambda r: r.get("orgnr", ""))
 
-        # Always fetch true totals from the batch record so stats are accurate
-        # regardless of which phase1_filter view is active.
+        # Load the current batch record (needed for both stats and filter config)
+        current_batch = None
+        if batch_id:
+            current_batch = await db.get(Batch, batch_id)
+
+        # Always use batch-level totals so stats are accurate regardless of the
+        # phase1_filter view that's active.
         if uploaded is not None:
             total_count = uploaded
         elif current_batch and current_batch.row_count_uploaded:
@@ -194,17 +199,14 @@ async def results_page(
         # Load the batch's filter config for the inline filter panel
         batch_filter_cfg = DEFAULT_FILTER_CONFIG.copy()
         batch_filter_cfg["filter_types"] = DEFAULT_FILTER_CONFIG["filter_types"].copy()
-        current_batch = None
-        if batch_id:
-            current_batch = await db.get(Batch, batch_id)
-            if current_batch and current_batch.filter_config_json:
-                stored = current_batch.filter_config_json
-                stored_types = stored.get("filter_types", {})
-                batch_filter_cfg.update(stored)
-                batch_filter_cfg["filter_types"] = {
-                    **DEFAULT_FILTER_CONFIG["filter_types"],
-                    **stored_types,
-                }
+        if current_batch and current_batch.filter_config_json:
+            stored = current_batch.filter_config_json
+            stored_types = stored.get("filter_types", {})
+            batch_filter_cfg.update(stored)
+            batch_filter_cfg["filter_types"] = {
+                **DEFAULT_FILTER_CONFIG["filter_types"],
+                **stored_types,
+            }
 
         # Load presets for the filter panel dropdown
         presets_result = await db.execute(
