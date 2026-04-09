@@ -173,12 +173,19 @@ def run_phase1(df: pd.DataFrame, config: dict[str, Any]) -> dict[str, Any]:
         df = _apply_filter(df, mask, "exclude_publikt_aktiebolag", filter_types, "hard")
 
     # ------------------------------------------------------------------ #
-    # FILTER 7: Profitability (ÅRETS RESULTAT > 0)                        #
+    # FILTER 7: Profitability (RESULTAT EFTER FINANSNETTO > 0)            #
+    # Falls back to ÅRETS RESULTAT if the column is not present.          #
     # ------------------------------------------------------------------ #
-    if config.get("hard_profitability_enabled", True) and "arets_resultat" in df.columns:
-        result = pd.to_numeric(df["arets_resultat"], errors="coerce")
-        mask = result.isna() | (result <= 0)
-        df = _apply_filter(df, mask, "profitability", filter_types, "hard")
+    if config.get("hard_profitability_enabled", True):
+        result_col = None
+        if "resultat_efter_finansnetto" in df.columns:
+            result_col = "resultat_efter_finansnetto"
+        elif "arets_resultat" in df.columns:
+            result_col = "arets_resultat"
+        if result_col:
+            result = pd.to_numeric(df[result_col], errors="coerce")
+            mask = result.isna() | (result <= 0)
+            df = _apply_filter(df, mask, "profitability", filter_types, "hard")
 
     # ------------------------------------------------------------------ #
     # FILTER 8: Profit margin ≥ N%                                        #

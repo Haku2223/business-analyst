@@ -40,6 +40,62 @@ COLUMN_MAP: dict[str, str] = {
     "RÖRELSERESULTAT EFTER AVSKRIVNINGAR": "rorelsresultat",
     "KASSALIKVIDITET I %": "kassalikviditet",
     "SKULDSÄTTNINGSGRAD": "skuldsattningsgrad",
+    # --- Additional columns stored in extra_data ---
+    "RESULTAT EFTER FINANSNETTO": "resultat_efter_finansnetto",  # model field
+    "NETTOOMSÄTTNING": "nettoomsattning",
+    "ÖVRIG OMSÄTTNING": "ovrig_omsattning",
+    "LAGERFÖRÄNDRINGAR": "lagerforandringar",
+    "LAGERFÖRÄNDRING": "lagerforandringar",
+    "RÖRELSEKOSTNADER": "rorelsekostnader",
+    "FINANSIELLA INTÄKTER": "finansiella_intakter",
+    "FINANSIELLA KOSTNADER": "finansiella_kostnader",
+    "ÖVRIGA FINANSIELLA KOSTNADER": "ovriga_finansiella_kostnader",
+    "SKATT PÅ ÅRETS RESULTAT": "skatt_pa_arets_resultat",
+    "IMMATERIELLA ANLÄGGNINGSTILLGÅNGAR": "immateriella_anlaggningstillgangar",
+    "MATERIELLA ANLÄGGNINGSTILLGÅNGAR": "materiella_anlaggningstillgangar",
+    "FINANSIELLA ANLÄGGNINGSTILLGÅNGAR": "finansiella_anlaggningstillgangar",
+    "FINANSIELLA TILLGÅNGAR": "finansiella_anlaggningstillgangar",
+    "ANLÄGGNINGSTILLGÅNGAR": "anlaggningstillgangar",
+    "VARULAGER": "varulager",
+    "KUNDFORDRINGAR": "kundfordringar",
+    "OMSÄTTNINGSTILLGÅNGAR": "omsattningstillgangar",
+    "FRITT EGET KAPITAL": "fritt_eget_kapital",
+    "OBESKATTADE RESERVER": "obeskattade_reserver",
+    "AVSÄTTNINGAR": "avsattningar",
+    "LÅNGFRISTIGA SKULDER": "langfristiga_skulder",
+    "LEVERANTÖRSSKULDER": "leverantorsskulder",
+    "KORTFRISTIGA SKULDER": "kortfristiga_skulder",
+    "SUMMA EGET KAPITAL OCH SKULDER": "summa_eget_kapital_och_skulder",
+    "FÖRESLAGEN UTDELNING": "foreslagen_utdelning",
+    "LÖNER ÖVRIGA": "loner_ovriga",
+    "AVKASTNING EGET KAPITAL I %": "avkastning_eget_kapital",
+    "AVKASTNING TOTALT KAPITAL I %": "avkastning_totalt_kapital",
+    "ADRESS": "adress",
+    "ADRESS (BESÖK)": "adress",
+    "POSTNR": "postnr",
+    "POSTNR (BESÖK)": "postnr",
+    "EPOST": "epost",
+    "REGISTRERAD FÖR MOMS": "registrerad_for_moms",
+    "REGISTRERAD FÖR F-SKATT": "registrerad_for_f_skatt",
+    "REGISTRERAD FÖR ARBETSGIVARAVGIFT": "registrerad_for_arbetsgivaravgift",
+    "KOMMUN": "kommun",
+}
+
+# Columns that should be stored in extra_data (not Company model fields)
+EXTRA_DATA_COLS: set[str] = {
+    "nettoomsattning", "ovrig_omsattning", "lagerforandringar", "rorelsekostnader",
+    "finansiella_intakter", "finansiella_kostnader", "ovriga_finansiella_kostnader",
+    "skatt_pa_arets_resultat",
+    "immateriella_anlaggningstillgangar", "materiella_anlaggningstillgangar",
+    "finansiella_anlaggningstillgangar", "anlaggningstillgangar", "varulager",
+    "kundfordringar", "omsattningstillgangar",
+    "fritt_eget_kapital", "obeskattade_reserver", "avsattningar",
+    "langfristiga_skulder", "leverantorsskulder", "kortfristiga_skulder",
+    "summa_eget_kapital_och_skulder", "foreslagen_utdelning", "loner_ovriga",
+    "avkastning_eget_kapital", "avkastning_totalt_kapital",
+    "adress", "postnr", "epost",
+    "registrerad_for_moms", "registrerad_for_f_skatt", "registrerad_for_arbetsgivaravgift",
+    "kommun",
 }
 
 # SNI columns (up to 5 codes + names)
@@ -50,7 +106,16 @@ SNI_NAME_COLS = [f"SNI NAMN {i}" for i in range(1, 6)]
 MONEY_COLS = {
     "omsattning", "arets_resultat", "aktiekapital", "eget_kapital",
     "summa_tillgangar", "kassa_och_bank", "loner_styrelse_vd",
-    "resultat_fore_skatt", "rorelsresultat",
+    "resultat_fore_skatt", "rorelsresultat", "resultat_efter_finansnetto",
+    "nettoomsattning", "ovrig_omsattning", "lagerforandringar", "rorelsekostnader",
+    "finansiella_intakter", "finansiella_kostnader", "ovriga_finansiella_kostnader",
+    "skatt_pa_arets_resultat",
+    "immateriella_anlaggningstillgangar", "materiella_anlaggningstillgangar",
+    "finansiella_anlaggningstillgangar", "anlaggningstillgangar", "varulager",
+    "kundfordringar", "omsattningstillgangar",
+    "fritt_eget_kapital", "obeskattade_reserver", "avsattningar",
+    "langfristiga_skulder", "leverantorsskulder", "kortfristiga_skulder",
+    "summa_eget_kapital_och_skulder", "foreslagen_utdelning", "loner_ovriga",
 }
 
 REQUIRED_COLS = {"bolagsnamn", "orgnr"}
@@ -300,7 +365,10 @@ def parse_file(
             )
 
     # Parse float percentage columns
-    for col in ("vinstmarginal", "soliditet", "kassalikviditet", "skuldsattningsgrad"):
+    for col in (
+        "vinstmarginal", "soliditet", "kassalikviditet", "skuldsattningsgrad",
+        "avkastning_eget_kapital", "avkastning_totalt_kapital",
+    ):
         if col in df.columns:
             df[col] = (
                 df[col]
@@ -360,7 +428,8 @@ def df_row_to_company_dict(row: dict[str, Any]) -> dict[str, Any]:
     Convert a DataFrame row dict to a dict suitable for creating/updating a Company model.
     Captures extra columns in the 'extra_data' JSON field.
     """
-    known_cols = set(COLUMN_MAP.values()) | {
+    # Columns that map to Company model fields
+    model_cols = (set(COLUMN_MAP.values()) - EXTRA_DATA_COLS) | {
         "orgnr", "allabolag_url", "sni_codes", "sni_names",
     }
     company_dict: dict[str, Any] = {}
@@ -373,8 +442,11 @@ def df_row_to_company_dict(row: dict[str, Any]) -> dict[str, Any]:
         if isinstance(v, float) and v != v:  # NaN check
             v = None
 
-        if k in known_cols:
+        if k in model_cols:
             company_dict[k] = v
+        elif k in EXTRA_DATA_COLS:
+            # Store with internal name so templates can access predictably
+            extra[k] = v
         elif k not in ("sni_codes", "sni_names"):
             extra[k] = v
 
