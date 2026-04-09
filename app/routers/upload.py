@@ -10,7 +10,7 @@ from sqlalchemy import select
 
 from app.auth import check_auth_redirect, get_display_name
 from app.database import get_db
-from app.models import Batch, BatchCompany, Company
+from app.models import Batch, BatchCompany, Company, FilterPreset
 from app.services.parser import get_sheet_names, parse_file, df_row_to_company_dict
 from app.services.phase1 import DEFAULT_FILTER_CONFIG, run_phase1
 from app.routers.filter import get_active_config
@@ -37,6 +37,18 @@ async def upload_page(request: Request):
 
     display_name = get_display_name(request)
     filter_config = get_active_config()
+
+    if filter_config == DEFAULT_FILTER_CONFIG:
+        from sqlalchemy import select as sa_select
+        async for db in get_db():
+            result = await db.execute(
+                sa_select(FilterPreset).where(FilterPreset.name == "__active__")
+            )
+            active_row = result.scalars().first()
+            if active_row:
+                filter_config = DEFAULT_FILTER_CONFIG.copy()
+                filter_config.update(active_row.config_json)
+            break
 
     return templates.TemplateResponse(
         "upload.html",
@@ -89,7 +101,7 @@ async def upload_post(
                 "request": request,
                 "display_name": display_name,
                 "active_page": "upload",
-                "filter_config": DEFAULT_FILTER_CONFIG,
+                "filter_config": get_active_config(),
                 "error": "No file selected.",
                 "success": None,
                 "sheets": [],
@@ -111,7 +123,7 @@ async def upload_post(
                 "request": request,
                 "display_name": display_name,
                 "active_page": "upload",
-                "filter_config": DEFAULT_FILTER_CONFIG,
+                "filter_config": get_active_config(),
                 "error": str(e),
                 "success": None,
                 "sheets": [],
@@ -127,6 +139,14 @@ async def upload_post(
     async for db in get_db():
         # Use the active filter config (set via /filter page), falling back to defaults
         filter_config = get_active_config()
+        if filter_config == DEFAULT_FILTER_CONFIG:
+            result = await db.execute(
+                select(FilterPreset).where(FilterPreset.name == "__active__")
+            )
+            active_row = result.scalars().first()
+            if active_row:
+                filter_config = DEFAULT_FILTER_CONFIG.copy()
+                filter_config.update(active_row.config_json)
 
         # Run Phase 1 filtering
         phase1_result = run_phase1(df, filter_config)
