@@ -57,6 +57,20 @@
         <span id="file-size" style="color:#6b7280;margin-left:8px"></span>
       </div>
 
+      <!-- List name + description -->
+      <div class="form-group mt-3">
+        <label class="form-label" for="list-name-input" style="font-weight:600">List name</label>
+        <input type="text" id="list-name-input" name="list_name" class="form-control"
+               style="max-width:420px" placeholder="e.g. Q1 2026 – IT Services Stockholm" />
+        <div style="font-size:12px;color:#9ca3af;margin-top:4px">Give this upload a descriptive name so you can identify it later.</div>
+      </div>
+      <div class="form-group mt-2">
+        <label class="form-label" for="list-desc-input" style="font-weight:600">Description / notes <span style="font-weight:400;color:#9ca3af">(optional)</span></label>
+        <textarea id="list-desc-input" name="list_description" class="form-control" rows="3"
+                  style="max-width:500px;resize:vertical"
+                  placeholder="Add context about this list — e.g. filters used on Allabolag, target geography, purpose of the search…"></textarea>
+      </div>
+
       <!-- Sheet selector (Excel only) -->
       <div id="sheet-selector" class="form-group mt-3">
         <label class="form-label">Sheet</label>

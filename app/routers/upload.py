@@ -87,6 +87,8 @@ async def upload_post(
     request: Request,
     file: UploadFile = File(...),
     sheet_name: str = Form(None),
+    list_name: str = Form(None),
+    list_description: str = Form(None),
 ):
     """Handle file upload: parse, run Phase 1, store in DB."""
     if not check_auth_redirect(request):
@@ -157,6 +159,8 @@ async def upload_post(
         # Create batch record
         batch = Batch(
             filename=file.filename,
+            list_name=list_name.strip() if list_name and list_name.strip() else None,
+            list_description=list_description.strip() if list_description and list_description.strip() else None,
             filter_config_json=filter_config,
             row_count_uploaded=row_count_uploaded,
             row_count_phase1=row_count_phase1,
