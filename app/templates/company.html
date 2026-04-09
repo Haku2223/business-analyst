@@ -134,18 +134,6 @@
   </div>
 </div>
 
-<!-- Determine data source: Phase 2 historical (multi-year) or Phase 1 single year -->
-{% if historical and historical|length > 0 %}
-  {% set display_financial = historical %}
-  {% set is_phase2 = true %}
-{% elif phase1_data %}
-  {% set display_financial = [phase1_data] %}
-  {% set is_phase2 = false %}
-{% else %}
-  {% set display_financial = [] %}
-  {% set is_phase2 = false %}
-{% endif %}
-
 <!-- Chart (Phase 2 multi-year only) -->
 {% if historical and historical|length > 1 %}
 <div class="card mb-3">

@@ -75,9 +75,11 @@ async def company_detail(request: Request, orgnr: str):
                     "soft_fails": ed.get("phase2a_soft_fails", []),
                 }
 
-        # Build a phase1_data dict (single year) from uploaded file data.
-        # Uses the same key names as Phase 2 historical data so templates are compatible.
+        # Build display_financial: Phase 2 multi-year if available, otherwise Phase 1 single year.
+        # is_phase2 flag lets the template know which mode it's in.
         phase1_data = None
+        display_financial: list = []
+        is_phase2 = bool(historical)
         if company:
             ex = company.extra_data or {}
             phase1_data = {
@@ -127,6 +129,7 @@ async def company_detail(request: Request, orgnr: str):
                 "avkastning_eget_kapital_pct": ex.get("avkastning_eget_kapital"),
                 "avkastning_totalt_kapital_pct": ex.get("avkastning_totalt_kapital"),
             }
+            display_financial = historical if historical else [phase1_data]
 
         return templates.TemplateResponse(
             "company.html",
@@ -140,6 +143,8 @@ async def company_detail(request: Request, orgnr: str):
                 "historical": historical or [],
                 "phase2a_results": phase2a_results,
                 "phase1_data": phase1_data,
+                "display_financial": display_financial,
+                "is_phase2": is_phase2,
             },
         )
 
