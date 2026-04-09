@@ -3,6 +3,20 @@
 {% block topbar_title %}Phase 1 Results{% endblock %}
 
 {% block head %}
+<script>
+// Redirect to last-viewed batch before the page renders, so navigating back
+// from a company detail page always restores the correct list.
+(function() {
+  var url = new URL(window.location);
+  if (!url.searchParams.has('batch_id')) {
+    var saved = sessionStorage.getItem('results_batch_id');
+    if (saved) {
+      url.searchParams.set('batch_id', saved);
+      window.location.replace(url.toString());
+    }
+  }
+})();
+</script>
 <style>
 .stat-pill { display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;font-size:12px;font-weight:600;background:#f3f4f6;color:#374151; }
 .stat-pill.green { background:#dcfce7;color:#166534; }
@@ -406,6 +420,9 @@
 
 {% block scripts %}
 <script>
+// Persist the active batch so navigating to a company and back stays on this list.
+{% if batch_id %}sessionStorage.setItem('results_batch_id', '{{ batch_id }}');{% endif %}
+
 // Client-side filter (works on visible page rows)
 const searchInput = document.getElementById('search-input');
 const statusFilter = document.getElementById('status-filter');
