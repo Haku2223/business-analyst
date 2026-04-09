@@ -55,8 +55,15 @@ async def pipeline_page(
     request: Request,
     batch_id: int = None,
     show_all: bool = False,
+    show_phase1: bool = False,
 ):
-    """Kanban board: list toggle, per-column cards, drag-and-drop."""
+    """Kanban board: list toggle, per-column cards, drag-and-drop.
+
+    Single-list view filter modes (mutually exclusive):
+    - default (neither flag):  phase1_passed=True AND phase2_status='complete'
+    - show_phase1=True:        phase1_passed=True (regardless of Phase 2)
+    - show_all=True:           all companies in the batch
+    """
     if not check_auth_redirect(request):
         return RedirectResponse("/login", status_code=302)
 
@@ -82,8 +89,15 @@ async def pipeline_page(
                 .where(BatchCompany.batch_id == batch_id)
                 .order_by(Company.bolagsnamn.asc())
             )
-            if not show_all:
+            if show_all:
+                pass  # no phase filter — show everything in the batch
+            elif show_phase1:
+                # Phase 1 survivors, regardless of Phase 2 status
                 query = query.where(BatchCompany.phase1_passed == True)  # noqa: E712
+            else:
+                # Default: passed both Phase 1 and Phase 2
+                query = query.where(BatchCompany.phase1_passed == True)  # noqa: E712
+                query = query.where(Company.phase2_status == "complete")
 
             result = await db.execute(query)
             pairs = result.all()
@@ -158,6 +172,7 @@ async def pipeline_page(
                 "current_batch": current_batch,
                 "batch_id": batch_id,
                 "show_all": show_all,
+                "show_phase1": show_phase1,
                 "columns": columns,
                 "statuses": STATUSES,
                 "total_cards": total_cards,

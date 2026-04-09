@@ -45,18 +45,33 @@
     border-color: var(--primary);
   }
 
-  .show-all-label {
+  .filter-checks {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    justify-content: center;
+  }
+
+  .filter-check-label {
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 13px;
+    font-size: 12px;
     color: var(--muted);
     cursor: pointer;
     white-space: nowrap;
-    padding: 6px 0;
     user-select: none;
+    padding: 2px 0;
   }
-  .show-all-label input { cursor: pointer; }
+  .filter-check-label input { cursor: pointer; }
+  .filter-check-label:hover { color: var(--text); }
+
+  .filter-default-label {
+    font-size: 11px;
+    color: var(--muted);
+    font-style: italic;
+    padding: 2px 0;
+  }
 
   /* ------------------------------------------------------------------ */
   /* Kanban board grid                                                     */
@@ -426,11 +441,23 @@
   </div>
 
   {% if batch_id is not none %}
-  <label class="show-all-label">
-    <input type="checkbox" id="showAllChk" {% if show_all %}checked{% endif %}
-           onchange="toggleShowAll(this)">
-    Show all companies in list
-  </label>
+  <div class="filter-checks">
+    {% if not show_all and not show_phase1 %}
+    <span class="filter-default-label">Showing: Phase 1 &amp; 2 passed</span>
+    {% endif %}
+    <label class="filter-check-label">
+      <input type="checkbox" id="showPhase1Chk"
+             {% if show_phase1 %}checked{% endif %}
+             onchange="togglePhase1(this)">
+      Show Phase 1 passed
+    </label>
+    <label class="filter-check-label">
+      <input type="checkbox" id="showAllChk"
+             {% if show_all %}checked{% endif %}
+             onchange="toggleShowAll(this)">
+      Show all companies in list
+    </label>
+  </div>
   {% endif %}
 </div>
 
@@ -685,12 +712,27 @@ function _statusLabel(s) {
 }
 
 /* ================================================================== */
-/* Show-all toggle                                                      */
+/* Filter checkboxes (mutually exclusive)                               */
 /* ================================================================== */
+function togglePhase1(chk) {
+  const url = new URL(window.location.href);
+  if (chk.checked) {
+    url.searchParams.set('show_phase1', 'true');
+    url.searchParams.delete('show_all');   // uncheck the other
+  } else {
+    url.searchParams.delete('show_phase1');
+  }
+  window.location.href = url.toString();
+}
+
 function toggleShowAll(chk) {
   const url = new URL(window.location.href);
-  if (chk.checked) url.searchParams.set('show_all', 'true');
-  else url.searchParams.delete('show_all');
+  if (chk.checked) {
+    url.searchParams.set('show_all', 'true');
+    url.searchParams.delete('show_phase1');  // uncheck the other
+  } else {
+    url.searchParams.delete('show_all');
+  }
   window.location.href = url.toString();
 }
 </script>
