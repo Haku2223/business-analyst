@@ -70,6 +70,24 @@ def _sni_display(sni_codes: str | None, sni_names: str | None) -> str:
     return first_code
 
 
+SORT_COL_MAP = {
+    "name": "bolagsnamn",
+    "orgnr": "orgnr",
+    "bolagstyp": "bolagstyp",
+    "city": "ort",
+    "sni": "sni_display",
+    "age": "age_years",
+    "revenue": "omsattning_sek",
+    "employees": "antal_anstallda",
+    "net_result": "net_result_ksek",
+    "margin": "vinstmarginal",
+    "soliditet": "soliditet",
+    "owner_salary": "loner_ksek",
+    "cash": "kassa_ksek",
+    "soft_flags": "soft_flags",
+}
+
+
 @router.get("/results", response_class=HTMLResponse)
 async def results_page(
     request: Request,
@@ -78,6 +96,8 @@ async def results_page(
     uploaded: int = None,
     passed: int = None,
     phase1_filter: str = "passed",
+    sort_col: str = None,
+    sort_dir: str = "asc",
 ):
     """Render Phase 1 results table."""
     if not check_auth_redirect(request):
@@ -144,6 +164,11 @@ async def results_page(
                 "soliditet": company.soliditet,
                 "loner_ksek": _öre_to_ksek(company.loner_styrelse_vd),
                 "kassa_ksek": _öre_to_ksek(company.kassa_och_bank),
+                "net_result_ksek": (
+                    _öre_to_ksek(company.resultat_efter_finansnetto)
+                    if company.resultat_efter_finansnetto is not None
+                    else _öre_to_ksek(company.arets_resultat)
+                ),
                 "ordforande": company.ordforande,
                 "vd": company.vd,
                 "hemsida": company.hemsida,
@@ -161,8 +186,20 @@ async def results_page(
             }
             rows.append(row)
 
-        # Always sort by orgnr for consistent pagination
-        rows.sort(key=lambda r: r.get("orgnr", ""))
+        # Server-side sort: use the requested column, fall back to orgnr for stability
+        sort_key = SORT_COL_MAP.get(sort_col, "orgnr") if sort_col else "orgnr"
+        reverse = sort_dir == "desc"
+
+        def _sort_val(r):
+            v = r.get(sort_key)
+            if v is None:
+                # None values always go to the end regardless of direction
+                return (1, 0, "")
+            if isinstance(v, (int, float)):
+                return (0, v, "")
+            return (0, 0, str(v).lower())
+
+        rows.sort(key=_sort_val, reverse=reverse)
 
         # Load the current batch record (needed for both stats and filter config)
         current_batch = None
@@ -233,6 +270,8 @@ async def results_page(
                 "presets": presets,
                 "show_all": show_all,
                 "phase1_filter": phase1_filter,
+                "sort_col": sort_col,
+                "sort_dir": sort_dir,
             },
         )
 
