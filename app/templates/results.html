@@ -299,22 +299,28 @@
     <table class="data-table" id="results-table">
       <thead>
         <tr>
-          <th class="sort-header" data-col="name">Företag</th>
-          <th class="sort-header" data-col="orgnr">Org.Nr</th>
-          <th class="sort-header" data-col="bolagstyp">Bolagstyp</th>
-          <th class="sort-header" data-col="city">Kommun / Län</th>
-          <th class="sort-header" data-col="sni">Industry (SNI)</th>
-          <th class="sort-header" data-col="age">Ålder</th>
-          <th class="sort-header" data-col="revenue">Net. Omsättning</th>
-          <th class="sort-header" data-col="employees">Emp.</th>
-          <th class="sort-header" data-col="net_result">Res. e. Finansnetto</th>
-          <th class="sort-header" data-col="margin">Vinstmarginal</th>
-          <th class="sort-header" data-col="soliditet">Sol. %</th>
-          <th class="sort-header" data-col="owner_salary">Own. Sal.</th>
-          <th class="sort-header" data-col="cash">Cash</th>
+          {% macro sort_th(col, label) %}
+            {% set is_active = sort_col == col %}
+            {% set next_dir = 'desc' if (is_active and sort_dir == 'asc') else 'asc' %}
+            {% set indicator = ' ▲' if (is_active and sort_dir == 'asc') else (' ▼' if (is_active and sort_dir == 'desc') else '') %}
+            <th class="sort-header" data-col="{{ col }}" data-sort-dir="{{ next_dir }}">{{ label }}{{ indicator }}</th>
+          {% endmacro %}
+          {{ sort_th('name', 'Företag') }}
+          {{ sort_th('orgnr', 'Org.Nr') }}
+          {{ sort_th('bolagstyp', 'Bolagstyp') }}
+          {{ sort_th('city', 'Kommun / Län') }}
+          {{ sort_th('sni', 'Industry (SNI)') }}
+          {{ sort_th('age', 'Ålder') }}
+          {{ sort_th('revenue', 'Net. Omsättning') }}
+          {{ sort_th('employees', 'Emp.') }}
+          {{ sort_th('net_result', 'Res. e. Finansnetto') }}
+          {{ sort_th('margin', 'Vinstmarginal') }}
+          {{ sort_th('soliditet', 'Sol. %') }}
+          {{ sort_th('owner_salary', 'Own. Sal.') }}
+          {{ sort_th('cash', 'Cash') }}
           <th>Chair / VD</th>
           <th>Website</th>
-          <th class="sort-header" data-col="soft_flags">Flags</th>
+          {{ sort_th('soft_flags', 'Flags') }}
           <th>Ph2</th>
           <th>Status</th>
         </tr>
@@ -396,7 +402,7 @@
 </div>
 
 <!-- Pagination -->
-{% macro page_url(p) %}?page={{ p }}{% if batch_id %}&batch_id={{ batch_id }}{% endif %}{% if phase1_filter != 'passed' %}&phase1_filter={{ phase1_filter }}{% endif %}{% endmacro %}
+{% macro page_url(p) %}?page={{ p }}{% if batch_id %}&batch_id={{ batch_id }}{% endif %}{% if phase1_filter != 'passed' %}&phase1_filter={{ phase1_filter }}{% endif %}{% if sort_col %}&sort_col={{ sort_col }}&sort_dir={{ sort_dir }}{% endif %}{% endmacro %}
 {% if total_pages > 1 %}
 <div class="pagination">
   {% if page > 1 %}
@@ -477,28 +483,19 @@ passedOnlyCheck.addEventListener('change', function() {
 
 applyFilters();
 
-// Column sorting
+// Column sorting — server-side: navigate to page 1 with sort params so the
+// full dataset is sorted before pagination, not just the current page.
 const table = document.getElementById('results-table');
 const headers = table.querySelectorAll('th.sort-header');
 headers.forEach(th => {
   th.addEventListener('click', () => {
     const col = th.dataset.col;
-    const asc = th.dataset.sort !== 'asc';
-    headers.forEach(h => { h.dataset.sort = ''; h.innerHTML = h.innerHTML.replace(' ▲','').replace(' ▼',''); });
-    th.dataset.sort = asc ? 'asc' : 'desc';
-    th.innerHTML += asc ? ' ▲' : ' ▼';
-    const rows = Array.from(tbody.querySelectorAll('tr'));
-    rows.sort((a, b) => {
-      const aCell = a.querySelector(`td[data-val]`) ? null : null;
-      // Find td by column index
-      const idx = Array.from(th.parentElement.children).indexOf(th);
-      const av = a.cells[idx]?.dataset?.val ?? a.cells[idx]?.textContent?.trim() ?? '';
-      const bv = b.cells[idx]?.dataset?.val ?? b.cells[idx]?.textContent?.trim() ?? '';
-      const an = parseFloat(av), bn = parseFloat(bv);
-      if (!isNaN(an) && !isNaN(bn)) return asc ? an - bn : bn - an;
-      return asc ? av.localeCompare(bv) : bv.localeCompare(av);
-    });
-    rows.forEach(r => tbody.appendChild(r));
+    const dir = th.dataset.sortDir || 'asc';
+    const url = new URL(window.location);
+    url.searchParams.set('sort_col', col);
+    url.searchParams.set('sort_dir', dir);
+    url.searchParams.set('page', '1');  // reset to first page on new sort
+    window.location.href = url.toString();
   });
 });
 
