@@ -271,7 +271,9 @@
 
 <!-- Filter bar -->
 <div class="filter-bar">
-  <input type="text" id="search-input" placeholder="Search company name, orgnr…" style="width:240px" />
+  <input type="text" id="search-input" placeholder="Search company name, orgnr…" style="width:220px" />
+  <input type="text" id="sni-filter" placeholder="Industry / SNI code…" style="width:180px" />
+  <input type="text" id="lan-filter" placeholder="Kommun / Län…" style="width:160px" />
   <select id="status-filter">
     <option value="">All statuses</option>
     <option value="unreviewed">Unreviewed</option>
@@ -333,6 +335,8 @@
           data-status="{{ row.pipeline_status or 'unreviewed' }}"
           data-passed="{{ '1' if row.phase1_passed else '0' }}"
           data-batch="{{ row.batch_id or '' }}"
+          data-sni="{{ (row.sni_display or '') ~ ' ' ~ (row.sni_codes or '') ~ ' ' ~ (row.sni_names or '') }}"
+          data-lan="{{ (row.lan or '') ~ ' ' ~ (row.ort or '') }}"
         >
           <td>
             <a href="/company/{{ row.orgnr }}" style="color:#2563eb;font-weight:500">{{ row.bolagsnamn or '—' }}</a>
@@ -431,6 +435,8 @@
 
 // Client-side filter (works on visible page rows)
 const searchInput = document.getElementById('search-input');
+const sniFilter = document.getElementById('sni-filter');
+const lanFilter = document.getElementById('lan-filter');
 const statusFilter = document.getElementById('status-filter');
 const batchFilter = document.getElementById('batch-filter');
 const passedOnlyCheck = document.getElementById('show-passed-only');
@@ -439,15 +445,21 @@ const resultCount = document.getElementById('result-count');
 
 function applyFilters() {
   const search = searchInput.value.toLowerCase();
+  const sni = sniFilter.value.toLowerCase();
+  const lan = lanFilter.value.toLowerCase();
   const status = statusFilter.value;
   let visible = 0;
   Array.from(tbody.querySelectorAll('tr')).forEach(tr => {
     const name = (tr.dataset.name || '').toLowerCase();
     const orgnr = (tr.dataset.orgnr || '').toLowerCase();
+    const rowSni = (tr.dataset.sni || '').toLowerCase();
+    const rowLan = (tr.dataset.lan || '').toLowerCase();
     const rowStatus = tr.dataset.status || '';
 
     let show = true;
     if (search && !name.includes(search) && !orgnr.includes(search)) show = false;
+    if (sni && !rowSni.includes(sni)) show = false;
+    if (lan && !rowLan.includes(lan)) show = false;
     if (status && rowStatus !== status) show = false;
     tr.style.display = show ? '' : 'none';
     if (show) visible++;
@@ -456,6 +468,8 @@ function applyFilters() {
 }
 
 searchInput.addEventListener('input', applyFilters);
+sniFilter.addEventListener('input', applyFilters);
+lanFilter.addEventListener('input', applyFilters);
 statusFilter.addEventListener('change', applyFilters);
 
 // Batch switching: full page reload so server loads the correct batch's filter config
