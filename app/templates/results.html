@@ -271,9 +271,9 @@
 
 <!-- Filter bar -->
 <div class="filter-bar">
-  <input type="text" id="search-input" placeholder="Search company name, orgnr…" style="width:220px" />
-  <input type="text" id="sni-filter" placeholder="Industry / SNI code…" style="width:180px" />
-  <input type="text" id="lan-filter" placeholder="Kommun / Län…" style="width:160px" />
+  <input type="text" id="search-input" placeholder="Search company name, orgnr…" style="width:220px" value="{{ q }}" />
+  <input type="text" id="sni-filter" placeholder="Industry / SNI code…" style="width:180px" value="{{ sni_q }}" />
+  <input type="text" id="lan-filter" placeholder="Kommun / Län…" style="width:160px" value="{{ lan_q }}" />
   <select id="status-filter">
     <option value="">All statuses</option>
     <option value="unreviewed">Unreviewed</option>
@@ -406,7 +406,7 @@
 </div>
 
 <!-- Pagination -->
-{% macro page_url(p) %}?page={{ p }}{% if batch_id %}&batch_id={{ batch_id }}{% endif %}{% if phase1_filter != 'passed' %}&phase1_filter={{ phase1_filter }}{% endif %}{% if sort_col %}&sort_col={{ sort_col }}&sort_dir={{ sort_dir }}{% endif %}{% endmacro %}
+{% macro page_url(p) %}?page={{ p }}{% if batch_id %}&batch_id={{ batch_id }}{% endif %}{% if phase1_filter != 'passed' %}&phase1_filter={{ phase1_filter }}{% endif %}{% if sort_col %}&sort_col={{ sort_col }}&sort_dir={{ sort_dir }}{% endif %}{% if q %}&q={{ q | urlencode }}{% endif %}{% if sni_q %}&sni_q={{ sni_q | urlencode }}{% endif %}{% if lan_q %}&lan_q={{ lan_q | urlencode }}{% endif %}{% endmacro %}
 {% if total_pages > 1 %}
 <div class="pagination">
   {% if page > 1 %}
@@ -433,7 +433,6 @@
 // Persist the active batch so navigating to a company and back stays on this list.
 {% if batch_id %}sessionStorage.setItem('results_batch_id', '{{ batch_id }}');{% endif %}
 
-// Client-side filter (works on visible page rows)
 const searchInput = document.getElementById('search-input');
 const sniFilter = document.getElementById('sni-filter');
 const lanFilter = document.getElementById('lan-filter');
@@ -443,33 +442,42 @@ const passedOnlyCheck = document.getElementById('show-passed-only');
 const tbody = document.getElementById('results-tbody');
 const resultCount = document.getElementById('result-count');
 
+// Search inputs trigger a full server-side search (debounced) so all pages are searched.
+let searchTimer = null;
+function onSearchInput() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(doSearch, 400);
+}
+function doSearch() {
+  const url = new URL(window.location);
+  const q = searchInput.value.trim();
+  const sni = sniFilter.value.trim();
+  const lan = lanFilter.value.trim();
+  if (q) url.searchParams.set('q', q); else url.searchParams.delete('q');
+  if (sni) url.searchParams.set('sni_q', sni); else url.searchParams.delete('sni_q');
+  if (lan) url.searchParams.set('lan_q', lan); else url.searchParams.delete('lan_q');
+  url.searchParams.set('page', '1');
+  window.location.href = url.toString();
+}
+searchInput.addEventListener('input', onSearchInput);
+sniFilter.addEventListener('input', onSearchInput);
+lanFilter.addEventListener('input', onSearchInput);
+
+// Status filter is client-side only (current page rows).
 function applyFilters() {
-  const search = searchInput.value.toLowerCase();
-  const sni = sniFilter.value.toLowerCase();
-  const lan = lanFilter.value.toLowerCase();
   const status = statusFilter.value;
   let visible = 0;
   Array.from(tbody.querySelectorAll('tr')).forEach(tr => {
-    const name = (tr.dataset.name || '').toLowerCase();
-    const orgnr = (tr.dataset.orgnr || '').toLowerCase();
-    const rowSni = (tr.dataset.sni || '').toLowerCase();
-    const rowLan = (tr.dataset.lan || '').toLowerCase();
-    const rowStatus = tr.dataset.status || '';
-
-    let show = true;
-    if (search && !name.includes(search) && !orgnr.includes(search)) show = false;
-    if (sni && !rowSni.includes(sni)) show = false;
-    if (lan && !rowLan.includes(lan)) show = false;
-    if (status && rowStatus !== status) show = false;
+    const show = !status || (tr.dataset.status || '') === status;
     tr.style.display = show ? '' : 'none';
     if (show) visible++;
   });
-  resultCount.textContent = visible + ' companies shown';
+  const total = {{ total_filtered }};
+  resultCount.textContent = status
+    ? visible + ' of ' + total + ' companies shown'
+    : total + ' companies found';
 }
 
-searchInput.addEventListener('input', applyFilters);
-sniFilter.addEventListener('input', applyFilters);
-lanFilter.addEventListener('input', applyFilters);
 statusFilter.addEventListener('change', applyFilters);
 
 // Batch switching: full page reload so server loads the correct batch's filter config
@@ -484,6 +492,9 @@ batchFilter.addEventListener('change', function() {
   url.searchParams.delete('page');
   url.searchParams.delete('uploaded');
   url.searchParams.delete('passed');
+  url.searchParams.delete('q');
+  url.searchParams.delete('sni_q');
+  url.searchParams.delete('lan_q');
   window.location.href = url.toString();
 });
 

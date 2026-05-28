@@ -98,6 +98,9 @@ async def results_page(
     phase1_filter: str = "passed",
     sort_col: str = None,
     sort_dir: str = "asc",
+    q: str = None,
+    sni_q: str = None,
+    lan_q: str = None,
 ):
     """Render Phase 1 results table."""
     if not check_auth_redirect(request):
@@ -201,6 +204,19 @@ async def results_page(
 
         rows.sort(key=_sort_val, reverse=reverse)
 
+        # Full-dataset text search (applied after sort, before pagination)
+        if q:
+            q_l = q.lower()
+            rows = [r for r in rows if q_l in (r["bolagsnamn"] or "").lower() or q_l in (r["orgnr"] or "").lower()]
+        if sni_q:
+            s_l = sni_q.lower()
+            rows = [r for r in rows if s_l in (r["sni_codes"] or "").lower() or s_l in (r["sni_names"] or "").lower() or s_l in (r["sni_display"] or "").lower()]
+        if lan_q:
+            l_l = lan_q.lower()
+            rows = [r for r in rows if l_l in (r["lan"] or "").lower() or l_l in (r["ort"] or "").lower()]
+
+        total_filtered = len(rows)
+
         # Load the current batch record (needed for both stats and filter config)
         current_batch = None
         if batch_id:
@@ -272,6 +288,10 @@ async def results_page(
                 "phase1_filter": phase1_filter,
                 "sort_col": sort_col,
                 "sort_dir": sort_dir,
+                "q": q or "",
+                "sni_q": sni_q or "",
+                "lan_q": lan_q or "",
+                "total_filtered": total_filtered,
             },
         )
 
